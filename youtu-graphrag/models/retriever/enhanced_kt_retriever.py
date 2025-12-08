@@ -94,7 +94,9 @@ class KTRetriever:
         self.debug_mode = True
 
         # 加载spaCy英语模型用于自然语言处理
-        self.nlp = spacy.load("en_core_web_lg")
+        # self.nlp = spacy.load("en_core_web_lg")
+        # 加载spaCy中文模型用于自然语言处理
+        self.nlp = spacy.load("zh_core_web_lg")
 
         # 初始化FAISS检索器用于向量相似度搜索
         self.faiss_retriever = DualFAISSRetriever(dataset, self.graph, cache_dir=cache_dir, device=self.device)
@@ -717,6 +719,7 @@ class KTRetriever:
         start_time = time.time()
 
         # 将自然语言问题转换为向量表示（嵌入）
+        logger.info("开始将自然语言问题转换为向量表示（嵌入）")
         question_embed = self._get_query_embedding(question)
         query_time = time.time() - start_time
 
@@ -725,6 +728,7 @@ class KTRetriever:
             # 使用基于类型的过滤路径
             type_start = time.time()
             # 执行类型基础的检索
+            logger.info("开始使用基于类型的过滤路径")
             type_filtered_results = self._type_based_retrieval(question_embed, question, involved_types)
             type_filtering_time = time.time() - type_start
             logger.info(f"Query encoding: {query_time:.3f}s, Type-based retrieval: {type_filtering_time:.3f}s")
@@ -751,10 +755,12 @@ class KTRetriever:
         # 检查recall_paths参数以决定使用单路径还是多路径检索
         if self.recall_paths == 1:
             # 单路径模式：仅对节点/关系路径进行类型过滤
+            logger.info("开始使用单路径模式")
             filtered_results = self._type_filtered_node_relation_retrieval(question_embed, question, involved_types)
             return filtered_results
         else:
             # 多路径模式：仅对节点/关系路径进行类型过滤，保持其他路径原始状态
+            logger.info("开始使用多路径模式")
             hybrid_results = self._hybrid_type_filtered_retrieval(question_embed, question, involved_types)
             return hybrid_results
 
@@ -824,16 +830,20 @@ class KTRetriever:
             # 如果有类型过滤后的节点
             if type_filtered_nodes:
                 # 在过滤后的节点上执行类型过滤的节点/关系路径检索
+                logger.info("开始使用类型过滤的节点/关系检索")
                 path1_results = self._type_filtered_node_relation_path(question_embed, type_filtered_nodes)
             else:
                 # 如果没有类型过滤后的节点，则回退到标准的节点/关系检索
+                logger.info("开始使用原始节点/关系检索")
                 path1_results = self._node_relation_retrieval(question_embed, question)
         else:
             # 如果没有提供目标节点类型，则执行标准的节点/关系检索
+            logger.info("开始使用原始节点/关系检索")
             path1_results = self._node_relation_retrieval(question_embed, question)
 
         # Path 2: 仅三元组检索
         # 执行三元组-only检索路径
+        logger.info("开始使用三元组-only检索")
         path2_results = self._triple_only_retrieval(question_embed)
 
         # 收集所有文本块ID
@@ -870,7 +880,9 @@ class KTRetriever:
         """
         # 在类型过滤后的节点上执行相似度搜索
         # 这会返回与问题最相关的节点列表
+        logger.info("开始使用类型过滤的节点相似度搜索")
         filtered_node_results = self._similarity_search_on_filtered_nodes(question_embed, filtered_nodes)
+        logger.info("完成类型过滤的节点相似度搜索")
 
         # 基于检索到的顶级节点，获取它们的一跳三元组（邻接关系）
         # 这些三元组提供了节点之间的直接关系信息
@@ -924,6 +936,7 @@ class KTRetriever:
 
         # 如果成功获取了过滤节点的嵌入向量
         if filtered_node_embeddings:
+            logger.info("成功获取了过滤节点的嵌入向量")
             filtered_embeddings_array = np.array(filtered_node_embeddings).astype('float32')
 
             # 创建临时的FAISS索引用于相似度搜索
@@ -933,7 +946,8 @@ class KTRetriever:
             # 确定搜索的节点数量（不超过top_k和实际节点数的最小值）
             search_k = min(self.top_k, len(filtered_node_embeddings))
             # 执行相似度搜索，找到与问题最相似的节点
-            _, indices = temp_index.search(question_embed.reshape(1, -1), search_k)
+            logger.info("开始执行相似度搜索,，找到与问题最相似的节点")
+            _, indices = temp_index.search(question_embed.cpu().reshape(1, -1), search_k)
 
             # 根据索引映射回实际的节点ID
             top_filtered_nodes = [filtered_node_map[idx] for idx in indices[0] if idx in filtered_node_map]
@@ -2044,6 +2058,7 @@ class KTRetriever:
         # 根据是否提供类型信息选择不同的检索方法
         if involved_types:
             # 如果提供了类型信息，使用带类型过滤的检索方法
+            logger.info("开始使用带类型过滤的检索方法")
             question_embed, results = self.retrieve_with_type_filtering(question, involved_types)
         else:
             # 否则使用普通的检索方法

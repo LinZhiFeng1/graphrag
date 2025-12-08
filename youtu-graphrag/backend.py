@@ -652,6 +652,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         # 获取数据集名称和问题内容
         dataset_name = request.dataset_name
         question = request.question
+        logger.info(f"Processing question: {question}")
 
         # 发送进度更新到客户端
         await send_progress_update(client_id, "retrieval", 10, "初始化检索系统 (agent 模式)...")
@@ -683,7 +684,9 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
 
         await send_progress_update(client_id, "retrieval", 40, "构建索引...")
         # 构建检索索引
+        logger.info("开始构建索引")
         kt_retriever.build_indices()
+        logger.info("索引构建完成")
 
         # Helper functions (复用 main.py 逻辑的精简版)
         def _dedup(items):
@@ -693,6 +696,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
 
         # Step 1: decomposition
         await send_progress_update(client_id, "retrieval", 50, "问题分解...")
+        logger.info("开始进行问题分解")
         try:
             # 使用 GraphQ 进行问题分解
             decomposition = graphq.decompose(question, schema_path)
@@ -703,6 +707,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             sub_questions = [{"sub-question": question}]
             involved_types = {"nodes": [], "relations": [], "attributes": []}
             decomposition = {"sub_questions": sub_questions, "involved_types": involved_types}
+        logger.info("问题分解完成")
 
         reasoning_steps = []
         all_triples = set()
@@ -712,15 +717,18 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         # Step 2: initial retrieval for each sub-question
         await send_progress_update(client_id, "retrieval", 65, "初始检索...")
         import time as _time
+        logger.info("开始进行初始检索")
         # 对每个子问题进行初步检索
         for idx, sq in enumerate(sub_questions):
             sq_text = sq.get("sub-question", question)
-            start_t = _time.time()
+
+            logger.info(f"开始处理检索结果，子问题 {idx+1}/{len(sub_questions)}: {sq_text}")
             retrieval_results, elapsed = kt_retriever.process_retrieval_results(
                 sq_text,
                 top_k=config.retrieval.top_k_filter,
                 involved_types=involved_types
             )
+            logger.info(f"检索完成")
             # 收集检索到的三元组和文本块
             triples = retrieval_results.get('triples', []) or []
             chunk_ids = retrieval_results.get('chunk_ids', []) or []
@@ -746,6 +754,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
 
         # Step 3: IRCoT iterative refinement
         await send_progress_update(client_id, "retrieval", 75, "迭代推理...")
+        logger.info("开始进行迭代推理")
         # 进行多轮迭代推理，最多3轮
         max_steps = getattr(getattr(config.retrieval, 'agent', object()), 'max_steps', 3)
         current_query = question
@@ -863,6 +872,7 @@ Your reasoning:
         )
     except Exception as e:
         await send_progress_update(client_id, "retrieval", 0, f"问答处理失败: {str(e)}")
+        logger.error(f"处理问题失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 def prepare_subquery_visualization(sub_questions: List[Dict], reasoning_steps: List[Dict]) -> Dict:
