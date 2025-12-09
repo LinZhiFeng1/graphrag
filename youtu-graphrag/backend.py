@@ -652,7 +652,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         # 获取数据集名称和问题内容
         dataset_name = request.dataset_name
         question = request.question
-        logger.info(f"Processing question: {question}")
+        logger.info(f"处理问题: {question}")
 
         # 发送进度更新到客户端
         await send_progress_update(client_id, "retrieval", 10, "初始化检索系统 (agent 模式)...")
@@ -706,7 +706,6 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             logger.error(f"Decompose failed: {e}")
             sub_questions = [{"sub-question": question}]
             involved_types = {"nodes": [], "relations": [], "attributes": []}
-            decomposition = {"sub_questions": sub_questions, "involved_types": involved_types}
         logger.info("问题分解完成")
 
         reasoning_steps = []

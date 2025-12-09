@@ -414,30 +414,37 @@ def agent_retrieval(graphq, kt_retriever, qa_pairs, schema_path):
             
             context = "=== Triples ===\n" + "\n".join(dedup_triples)
             context += "\n=== Chunks ===\n" + "\n".join(dedup_chunk_contents)
-            
-            ircot_prompt = f"""
-                            You are an expert knowledge assistant using iterative retrieval with chain-of-thought reasoning.
-                            
-                            Current Question: {current_query}
-                            
-                            Available Knowledge Context:
-                            {context}
-                            
-                            Previous Thoughts: {' | '.join(thoughts) if thoughts else 'None'}
-                            
-                            Step {step}: Please think step by step about what additional information you need to answer the question completely and accurately.
-                            
-                            Instructions:
-                            1. Analyze the current knowledge context and the question
-                            2. Consider the initial analysis from noagent mode (if available in previous thoughts)
-                            3. Think about what information might be missing or unclear
-                            4. If you have enough information to answer, in the end of your response, write "So the answer is:" followed by your final answer
-                            5. If you need more information, in the end of your response, write a specific query begin with "The new query is:" to retrieve additional relevant information
-                            6. Be specific and focused in your reasoning
-                            7. Build upon the initial analysis to provide deeper insights
-                            
-                            Your reasoning:
-                            """
+            ircot_prompt = kt_retriever.config.get_prompt_formatted(
+                "retrieval",
+                "ircot",  # 使用中文模板
+                current_query=current_query,
+                context=context,
+                previous_thoughts=' | '.join(thoughts) if thoughts else "None",
+                step=step
+            )
+            # ircot_prompt = f"""
+            #                 You are an expert knowledge assistant using iterative retrieval with chain-of-thought reasoning.
+            #
+            #                 Current Question: {current_query}
+            #
+            #                 Available Knowledge Context:
+            #                 {context}
+            #
+            #                 Previous Thoughts: {' | '.join(thoughts) if thoughts else 'None'}
+            #
+            #                 Step {step}: Please think step by step about what additional information you need to answer the question completely and accurately.
+            #
+            #                 Instructions:
+            #                 1. Analyze the current knowledge context and the question
+            #                 2. Consider the initial analysis from noagent mode (if available in previous thoughts)
+            #                 3. Think about what information might be missing or unclear
+            #                 4. If you have enough information to answer, in the end of your response, write "So the answer is:" followed by your final answer
+            #                 5. If you need more information, in the end of your response, write a specific query begin with "The new query is:" to retrieve additional relevant information
+            #                 6. Be specific and focused in your reasoning
+            #                 7. Build upon the initial analysis to provide deeper insights
+            #
+            #                 Your reasoning:
+            #                 """
             max_retries = 20
             response = None
             for retry in range(max_retries):

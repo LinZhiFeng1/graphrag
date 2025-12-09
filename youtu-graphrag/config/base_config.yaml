@@ -12,7 +12,8 @@ construction:
   mode: agent
   overlap: 200
   tree_comm:
-    embedding_model: all-MiniLM-L6-v2
+#    embedding_model: all-MiniLM-L6-v2
+    embedding_model: BAAI/bge-m3
     enable_fast_mode: true
     struct_weight: 0.3
     
@@ -53,11 +54,18 @@ datasets:
     schema_path: schemas/anony_eng.json
     graph_output: output/graphs/anony_eng_new.json
 
+#embeddings:
+#  batch_size: 32
+#  device: cuda
+#  max_length: 512
+#  model_name: all-MiniLM-L6-v2
+
+#显存不够记得改
 embeddings:
   batch_size: 32
   device: cuda
-  max_length: 512
-  model_name: all-MiniLM-L6-v2
+  max_length: 1024
+  model_name: BAAI/bge-m3
 
 output:
   base_dir: output
@@ -145,7 +153,23 @@ prompts:
       \   原始问题：\\\"智取生辰纲事件中，PERSON#1是谁\\\"\n   输出：\n   {{\n       \\\"sub_questions\\\": [\n           {{\\\"sub-question\\\": \\\"\
       智取生辰纲事件中，PERSON#1是谁？\\\"}}\n       ],\n       \\\"involved_types\\\": {{\n           \\\"nodes\\\": [\\\"person\\\", \\\"event\\\"],\n           \\\"relations\\\": [\\\"参与\\\"],\n           \\\"attributes\\\": [\\\"name\\\"]\n       }}\n   }}\n"
   retrieval:
-    general: 'You are an expert knowledge assistant. Your task is to answer the question
+    general: '
+      你是知识问答助手，你的任务是根据提供的知识上下文回答问题。
+        
+        1. 仅使用提供的知识上下文中的信息来回答问题
+        2. 如果知识不足，请说明无法回答
+        3. 回答应精确简洁
+        4. 对于事实性问题，提供具体的事实或实体名称
+        5. 对于时间性问题，提供具体的日期、年份或时间段
+        
+        问题：{question}
+        
+        知识上下文：
+        {context}
+        
+        答案（精确直接）：
+    '
+    general_eng: 'You are an expert knowledge assistant. Your task is to answer the question
       based on the provided knowledge context.
 
 
@@ -172,7 +196,27 @@ prompts:
       Answer (be specific and direct):
 
       '
-    ircot: 'You are an expert knowledge assistant using iterative retrieval with chain-of-thought
+    ircot: '你是使用迭代检索和链式思维推理的知识助手。
+      
+      当前问题: {current_query}
+      
+      可用知识上下文:
+      {context}
+      
+      之前的思考: {previous_thoughts}
+      
+      步骤 {step}: 请逐步思考需要什么额外信息来完整准确地回答问题。
+      
+      指导原则:
+      1. 分析当前知识上下文和问题
+      2. 思考哪些信息可能缺失或不清楚
+      3. 如果已有足够信息回答，在响应末尾写上"所以答案是:"后跟最终答案
+      4. 如果需要更多信息，在响应末尾写上以"新查询是:"开头的具体查询来检索更多相关信息
+      5. 推理要具体且专注
+      
+      你的推理:
+    '
+    ircot_eng: 'You are an expert knowledge assistant using iterative retrieval with chain-of-thought
       reasoning.
 
 

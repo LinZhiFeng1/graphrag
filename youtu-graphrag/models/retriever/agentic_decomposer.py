@@ -1,5 +1,6 @@
 import json_repair
 from  utils import call_llm_api
+from utils.logger import logger
 
 try:
     from config import get_config
@@ -58,7 +59,7 @@ class GraphQ:
             if self.dataset_name == "anony_chs":
                 return self.config.get_prompt_formatted("decomposition", "anony_chs", ontology=schema, question=question)
             else:
-                return self.config.get_prompt_formatted("decomposition", "general", ontology=schema, question=question)
+                return self.config.get_prompt_formatted("decomposition", "novel", ontology=schema, question=question)
         else:
             if self.dataset_name == "anony_chs":
                 return f"""
@@ -152,5 +153,6 @@ class GraphQ:
                     "attributes": []
                 }
             }
-        
+        logger.info(f"问题分解Prompt: {prompt}")
+        logger.info(f"问题分解结果: {content}")
         return content  

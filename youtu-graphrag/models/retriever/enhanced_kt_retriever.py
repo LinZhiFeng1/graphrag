@@ -23,6 +23,7 @@ try:
 except ImportError:
     get_config = None
 
+
 class KTRetriever:
     """
     增强型的知识三元组检索器，支持多种检索路径和优化机制。
@@ -33,18 +34,19 @@ class KTRetriever:
         支持基于类型的过滤检索
         支持多种数据集配置
     """
+
     def __init__(
-        self,
-        dataset: str,
-        json_path: str = None,
-        qa_encoder: Optional[SentenceTransformer] = None,
-        device: str = "cuda",
-        cache_dir: str = "retriever/faiss_cache_new",
-        top_k: int = 5,
-        recall_paths: int = 2,
-        schema_path: str = None,
-        mode: str = "agent",
-        config=None
+            self,
+            dataset: str,
+            json_path: str = None,
+            qa_encoder: Optional[SentenceTransformer] = None,
+            device: str = "cuda",
+            cache_dir: str = "retriever/faiss_cache_new",
+            top_k: int = 5,
+            recall_paths: int = 2,
+            schema_path: str = None,
+            mode: str = "agent",
+            config=None
     ):
         # 尝试获取全局配置
         if config is None and get_config is not None:
@@ -52,7 +54,7 @@ class KTRetriever:
                 config = get_config()
             except:
                 config = None
-        
+
         self.config = config
 
         # 如果有配置，使用配置中的默认值覆盖传入参数
@@ -68,7 +70,8 @@ class KTRetriever:
 
         # 加载图谱数据和编码器
         self.graph = graph_processor.load_graph_from_json(json_path)
-        self.qa_encoder = qa_encoder or SentenceTransformer('all-MiniLM-L6-v2')
+        # self.qa_encoder = qa_encoder or SentenceTransformer('all-MiniLM-L6-v2')
+        self.qa_encoder = qa_encoder or SentenceTransformer('BAAI/bge-m3')
 
         # 初始化LLM客户端用于生成答案
         self.llm_client = call_llm_api.LLMCompletionCall()
@@ -81,7 +84,7 @@ class KTRetriever:
             self.device = "cuda"
         else:
             self.device = device
-        logger.info(f"Using device: {self.device}")
+        logger.info(f"KTRetriever Using device: {self.device}")
 
         # 设置基本参数
         self.cache_dir = cache_dir
@@ -119,11 +122,11 @@ class KTRetriever:
             'node_embedding': threading.RLock(),
             'triple_embedding': threading.RLock(),
             'query_embedding': threading.RLock(),
-            'chunk_embedding': threading.RLock()  
+            'chunk_embedding': threading.RLock()
         }
 
         # 节点嵌入预计算状态和锁
-        self.node_embeddings_precomputed = False 
+        self.node_embeddings_precomputed = False
         self.precompute_lock = threading.Lock()
 
         # 加载与图谱关联的原始文本块，用于提供上下文信息
@@ -137,10 +140,10 @@ class KTRetriever:
                         if line and "\t" in line:
                             parts = line.split("\t", 1)
                             if len(parts) == 2 and parts[0].startswith("id: ") and parts[1].startswith("Chunk: "):
-                                chunk_id = parts[0][4:] 
-                                chunk_text = parts[1][7:]  
+                                chunk_id = parts[0][4:]
+                                chunk_text = parts[1][7:]
                                 self.chunk2id[chunk_id] = chunk_text
-                logger.info(f"Loaded {len(self.chunk2id)} chunks from {chunk_file}")
+                logger.info(f"从 {chunk_file} 加载了 {len(self.chunk2id)} 个文本块")
             except Exception as e:
                 logger.error(f"Error loading chunks from {chunk_file}: {e}")
                 self.chunk2id = {}
@@ -172,11 +175,12 @@ class KTRetriever:
                     self.node_embeddings_precomputed = True
 
                     # 确保FAISS检索器也有节点嵌入缓存
-                    if not hasattr(self.faiss_retriever, 'node_embedding_cache') or not self.faiss_retriever.node_embedding_cache:
+                    if not hasattr(self.faiss_retriever,
+                                   'node_embedding_cache') or not self.faiss_retriever.node_embedding_cache:
                         self.faiss_retriever.node_embedding_cache = {}
                         for node, embed in self.node_embedding_cache.items():
                             self.faiss_retriever.node_embedding_cache[node] = embed.clone().detach()
-                
+
             except Exception as e:
                 # 如果优化初始化失败，禁用性能优化
                 self.enable_performance_optimizations = False
@@ -195,8 +199,8 @@ class KTRetriever:
         # 使用qa_encoder对查询语句进行编码，生成向量表示
         # 然后将结果转换为PyTorch张量，设置为浮点型，并移动到指定设备（CPU或GPU）
         query_embed = torch.tensor(
-                    self.qa_encoder.encode(query)
-                ).float().to(self.device)
+            self.qa_encoder.encode(query)
+        ).float().to(self.device)
         return query_embed
 
     def _precompute_node_texts(self):
@@ -208,7 +212,7 @@ class KTRetriever:
         # 如果成功加载，则直接返回，无需重新计算
         if self._load_node_text_cache():
             return
-        
+
         start_time = time.time()
 
         # 获取图中所有节点的列表
@@ -225,12 +229,13 @@ class KTRetriever:
                     # 将节点文本存储到缓存中
                     self._node_text_cache[node] = node_text
                 processed_nodes += 1
-                
+
             except Exception as e:
                 continue
-        
+
         end_time = time.time()
-        logger.info(f"Node texts precomputed for {len(self._node_text_cache)} nodes in {end_time - start_time:.2f} seconds")
+        logger.info(
+            f"Node texts precomputed for {len(self._node_text_cache)} nodes in {end_time - start_time:.2f} seconds")
 
         # 尝试将计算得到的节点文本缓存保存到磁盘
         try:
@@ -245,17 +250,18 @@ class KTRetriever:
             # 检查缓存是否为空，如果为空则不保存
             if not self._node_text_cache:
                 return False
-                
+
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
 
             # 以二进制写入模式打开文件，使用pickle序列化保存缓存
             with open(cache_path, 'wb') as f:
                 pickle.dump(self._node_text_cache, f)
-            
+
             file_size = os.path.getsize(cache_path)
-            logger.info(f"Saved node text cache with {len(self._node_text_cache)} entries to {cache_path} (size: {file_size} bytes)")
+            logger.info(
+                f"Saved node text cache with {len(self._node_text_cache)} entries to {cache_path} (size: {file_size} bytes)")
             return True
-                
+
         except Exception as e:
             return False
 
@@ -284,10 +290,11 @@ class KTRetriever:
                 if not self._check_text_cache_consistency():
                     logger.warning("Text cache inconsistent with current graph, will rebuild")
                     return False
-                
-                logger.info(f"Loaded node text cache with {len(self._node_text_cache)} entries from {cache_path} (file size: {file_size} bytes)")
+
+                logger.info(
+                    f"Loaded node text cache with {len(self._node_text_cache)} entries from {cache_path} (file size: {file_size} bytes)")
                 return True
-                
+
             except Exception as e:
                 logger.error(f"Error loading node text cache: {e}")
                 try:
@@ -319,11 +326,12 @@ class KTRetriever:
             extra_nodes = cached_nodes - current_nodes
             # 如果多余节点数量超过当前图节点数量的10%，记录警告并返回False
             if len(extra_nodes) > len(current_nodes) * 0.1:
-                logger.warning(f"Text cache has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
+                logger.warning(
+                    f"Text cache has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
                 return False
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error checking text cache consistency: {e}")
             return False
@@ -351,18 +359,19 @@ class KTRetriever:
                 self.node_embeddings_precomputed = True
 
                 # 记录日志并保存缓存到磁盘
-                logger.info(f"Successfully loaded {len(self.node_embedding_cache)} node embeddings from faiss_retriever cache")
+                logger.info(
+                    f"Successfully loaded {len(self.node_embedding_cache)} node embeddings from faiss_retriever cache")
                 self._save_node_embedding_cache()
                 return
-            
+
             logger.warning("No cache found, computing embeddings from scratch...")
 
             # 获取图中所有节点列表
             all_nodes = list(self.graph.nodes())
             batch_size = 100
             if self.config:
-                batch_size = self.config.embeddings.batch_size * 3 
-            
+                batch_size = self.config.embeddings.batch_size * 3
+
             total_processed = 0
             for i in range(0, len(all_nodes), batch_size):
                 # 获取当前批次的节点
@@ -393,10 +402,10 @@ class KTRetriever:
                         for j, node in enumerate(valid_nodes):
                             self.node_embedding_cache[node] = batch_embeddings[j]
                             total_processed += 1
-                            
+
                     except Exception as e:
                         # 如果批处理编码失败，记录错误并回退到逐个节点编码
-                        logger.error(f"Error encoding batch {i//batch_size}: {str(e)}")
+                        logger.error(f"Error encoding batch {i // batch_size}: {str(e)}")
                         for node in valid_nodes:
                             try:
                                 node_text = self._get_node_text(node)
@@ -412,7 +421,8 @@ class KTRetriever:
 
             # 标记节点嵌入预计算完成
             self.node_embeddings_precomputed = True
-            logger.info(f"Node embeddings precomputed for {total_processed} nodes (cache size: {len(self.node_embedding_cache)})")
+            logger.info(
+                f"Node embeddings precomputed for {total_processed} nodes (cache size: {len(self.node_embedding_cache)})")
 
             # 尝试将节点嵌入缓存保存到磁盘
             try:
@@ -431,7 +441,7 @@ class KTRetriever:
             if not self.node_embedding_cache:
                 logger.warning("Warning: No node embeddings to save!")
                 return False
-                
+
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
 
             # 创建用于保存到磁盘的CPU缓存字典
@@ -450,11 +460,11 @@ class KTRetriever:
                     except Exception as e:
                         logger.warning(f"Warning: Failed to convert embedding for node {node}: {e}")
                         continue
-            
+
             if not cpu_cache:
                 logger.warning("Warning: No valid embeddings to save!")
                 return False
-            
+
             try:
                 # 创建用于PyTorch保存的张量缓存字典
                 tensor_cache = {}
@@ -476,11 +486,12 @@ class KTRetriever:
                 np.savez_compressed(cache_path_npz, **cpu_cache)
                 cache_path = cache_path_npz
                 logger.error(f"Saved using numpy.savez_compressed format")
-            
+
             file_size = os.path.getsize(cache_path)
-            logger.info(f"Saved node embedding cache with {len(cpu_cache)} entries to {cache_path} (size: {file_size} bytes)")
+            logger.info(
+                f"Saved node embedding cache with {len(cpu_cache)} entries to {cache_path} (size: {file_size} bytes)")
             return True
-                
+
         except Exception as e:
             logger.error(f"Error saving node embedding cache: {e}")
             return False
@@ -498,7 +509,7 @@ class KTRetriever:
 
                 # 使用numpy加载压缩的.npyz文件
                 numpy_cache = np.load(cache_path_npz)
-                
+
                 if len(numpy_cache.files) == 0:
                     logger.warning("Warning: Loaded cache is empty")
                     return False
@@ -518,28 +529,29 @@ class KTRetriever:
                     except Exception as e:
                         logger.warning(f"Warning: Failed to load embedding for node {node}: {e}")
                         continue
-                
+
                 numpy_cache.close()
 
                 # 检查加载的缓存与当前图是否一致
                 if not self._check_embedding_cache_consistency():
                     logger.info("Embedding cache inconsistent with current graph, will rebuild")
                     return False
-                
-                logger.info(f"Loaded node embedding cache with {len(self.node_embedding_cache)} entries from {cache_path_npz}")
+
+                logger.info(
+                    f"Loaded node embedding cache with {len(self.node_embedding_cache)} entries from {cache_path_npz}")
                 return True
-                
+
             except Exception as e:
                 logger.error(f"Error loading numpy cache: {e}")
-        
+
         # 如果.npyz格式不存在或加载失败，回退到.pt格式
         if os.path.exists(cache_path):
             try:
                 file_size = os.path.getsize(cache_path)
-                if file_size < 1000: 
-                    logger.warning(f"Warning: Cache file too small ({file_size} bytes), likely empty or corrupted")
+                if file_size < 1000:
+                    logger.warning(f"警告: 缓存文件太小 ({file_size} 字节)，可能为空或已损坏")
                     return False
-                
+
                 try:
                     # 尝试使用PyTorch加载.pt文件
                     cpu_cache = torch.load(cache_path, map_location='cpu', weights_only=False)
@@ -558,7 +570,7 @@ class KTRetriever:
                             raise e
                     else:
                         raise e
-                
+
                 if not cpu_cache:
                     logger.warning("Warning: Loaded cache is empty")
                     return False
@@ -574,12 +586,12 @@ class KTRetriever:
                                 embed_tensor = torch.from_numpy(embed).float()
                             else:
                                 embed_tensor = embed.cpu() if hasattr(embed, 'cpu') else embed
-                            
+
                             if self.device == "cuda" and torch.cuda.is_available():
                                 embed_tensor = embed_tensor.to(self.device)
                             else:
                                 embed_tensor = embed_tensor.to("cpu")
-                                
+
                             self.node_embedding_cache[node] = embed_tensor
                         except Exception as e:
                             logger.error(f"Warning: Failed to load embedding for node {node}: {e}")
@@ -590,9 +602,9 @@ class KTRetriever:
                     logger.info("Embedding cache inconsistent with current graph, will rebuild")
                     return False
 
-                logger.info(f"Loaded node embedding cache with {len(self.node_embedding_cache)} entries from {cache_path} (file size: {file_size} bytes)")
+                logger.info(f"从 {cache_path} 加载了包含 {len(self.node_embedding_cache)} 个条目的节点嵌入缓存 (文件大小: {file_size} 字节)")
                 return True
-                
+
             except Exception as e:
                 logger.error(f"Error loading node embedding cache: {e}")
                 try:
@@ -623,11 +635,12 @@ class KTRetriever:
             # 计算缓存中存在但图中不存在的节点（多余的节点）
             extra_nodes = cached_nodes - current_nodes
             if len(extra_nodes) > len(current_nodes) * 0.1:  # Allow 10% tolerance
-                logger.info(f"Embedding cache has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
+                logger.info(
+                    f"Embedding cache has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
                 return False
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error checking embedding cache consistency: {e}")
             return False
@@ -693,7 +706,7 @@ class KTRetriever:
             # 构造单路径结果
             result = {
                 "path1_results": path1_results,
-                "chunk_ids": limited_chunk_ids 
+                "chunk_ids": limited_chunk_ids
             }
         else:
             # 双路径并行检索模式
@@ -702,7 +715,7 @@ class KTRetriever:
             result = self._parallel_dual_path_retrieval(question_embed, question)
             parallel_time = time.time() - parallel_start
             logger.info(f"Query encoding: {query_time:.3f}s, Parallel retrieval: {parallel_time:.3f}s")
-        
+
         return question_embed, result
 
     def retrieve_with_type_filtering(self, question: str, involved_types: dict = None) -> Dict:
@@ -732,7 +745,7 @@ class KTRetriever:
             type_filtered_results = self._type_based_retrieval(question_embed, question, involved_types)
             type_filtering_time = time.time() - type_start
             logger.info(f"Query encoding: {query_time:.3f}s, Type-based retrieval: {type_filtering_time:.3f}s")
-            
+
             return question_embed, type_filtered_results
         else:
             # 如果没有提供类型信息或类型信息为空，则回退到原始检索方法
@@ -764,7 +777,8 @@ class KTRetriever:
             hybrid_results = self._hybrid_type_filtered_retrieval(question_embed, question, involved_types)
             return hybrid_results
 
-    def _type_filtered_node_relation_retrieval(self, question_embed: torch.Tensor, question: str, involved_types: dict) -> Dict:
+    def _type_filtered_node_relation_retrieval(self, question_embed: torch.Tensor, question: str,
+                                               involved_types: dict) -> Dict:
         """
         单路径检索，仅在节点/关系路径上进行类型过滤。
 
@@ -804,10 +818,11 @@ class KTRetriever:
         else:
             # 如果没有类型过滤后的节点，则回退到标准的节点/关系检索
             result = self._node_relation_retrieval(question_embed, question)
-        
+
         return result
 
-    def _hybrid_type_filtered_retrieval(self, question_embed: torch.Tensor, question: str, involved_types: dict) -> Dict:
+    def _hybrid_type_filtered_retrieval(self, question_embed: torch.Tensor, question: str,
+                                        involved_types: dict) -> Dict:
         """
         多路径检索：类型过滤的节点/关系路径 + 原始其他路径。
 
@@ -864,7 +879,7 @@ class KTRetriever:
             "path2_results": path2_results,
             "chunk_ids": list(all_chunk_ids)
         }
-        
+
         return result
 
     def _type_filtered_node_relation_path(self, question_embed: torch.Tensor, filtered_nodes: list) -> Dict:
@@ -940,8 +955,8 @@ class KTRetriever:
             filtered_embeddings_array = np.array(filtered_node_embeddings).astype('float32')
 
             # 创建临时的FAISS索引用于相似度搜索
-            temp_index = faiss.IndexFlatIP(filtered_embeddings_array.shape[1])# 使用内积相似度
-            temp_index.add(filtered_embeddings_array)# 将嵌入向量添加到索引中
+            temp_index = faiss.IndexFlatIP(filtered_embeddings_array.shape[1])  # 使用内积相似度
+            temp_index.add(filtered_embeddings_array)  # 将嵌入向量添加到索引中
 
             # 确定搜索的节点数量（不超过top_k和实际节点数的最小值）
             search_k = min(self.top_k, len(filtered_node_embeddings))
@@ -1085,7 +1100,7 @@ class KTRetriever:
 
         # 限制返回的文本块ID数量为top_k
         limited_chunk_ids = list(all_chunk_ids)[:self.top_k]
-        
+
         end_time = time.time()
         logger.info(f"Time taken to extract chunk IDs: {end_time - start_time} seconds")
 
@@ -1174,7 +1189,7 @@ class KTRetriever:
                     results['path_triples'] = path_future.result()
                 except Exception as e:
                     logger.error(f"Path strategy failed: {e}")
-        
+
         return results
 
     def _faiss_node_search(self, q_embed, search_k: int) -> List[str]:
@@ -1209,7 +1224,7 @@ class KTRetriever:
                     candidate_nodes.append(node_id)
             except KeyError:
                 continue
-        
+
         return candidate_nodes
 
     def _faiss_relation_search(self, q_embed, top_k: int) -> List[str]:
@@ -1233,7 +1248,7 @@ class KTRetriever:
 
         # 处理搜索结果，将索引转换为实际的关系名称
         relations = []
-        for idx in I_relations[0]:# I_relations[0]包含返回的最相似向量的索引
+        for idx in I_relations[0]:  # I_relations[0]包含返回的最相似向量的索引
             if idx == -1:
                 continue
             try:
@@ -1339,7 +1354,7 @@ class KTRetriever:
                 existing_faiss_nodes = set(faiss_candidate_nodes)
                 # 过滤掉已经在FAISS结果中的节点
                 keyword_candidate_nodes = [
-                    n for n in keyword_nodes 
+                    n for n in keyword_nodes
                     if n not in existing_faiss_nodes
                 ]
 
@@ -1363,7 +1378,7 @@ class KTRetriever:
             # 如果有关键词相似度结果，也添加到候选节点中
             if future_keyword_sim:
                 keyword_similarities = future_keyword_sim.result()
-                
+
                 candidate_nodes.extend(
                     (node, sim) for node, sim in keyword_similarities.items()
                     if sim > 0.05  # 过滤掉相似度太低的结果
@@ -1402,7 +1417,7 @@ class KTRetriever:
 
             # 合并所有三元组并去重
             all_triples = list({
-                triple for triple in 
+                triple for triple in
                 one_hop_triples + path_triples + relation_triples
             })
             # 获取文本块检索结果
@@ -1415,7 +1430,6 @@ class KTRetriever:
             "one_hop_triples": all_triples,  # 所有相关三元组
             "chunk_results": chunk_results  # 文本块检索结果
         }
-
 
     def _execute_faiss_node_search(self, q_embed, search_k: int) -> List[str]:
         """执行FAISS节点搜索并返回对应的节点ID列表"""
@@ -1532,7 +1546,7 @@ class KTRetriever:
             # 遍历图中所有边，u为头节点，v为尾节点，data为边的属性数据
             for u, v, data in self.graph.edges(data=True)
             # 筛选条件：边的关系在关系集合中，且头节点或尾节点在顶级节点集合中
-            if data.get('relation') in relation_set and 
+            if data.get('relation') in relation_set and
                (u in top_node_set or v in top_node_set)
         ]
 
@@ -1551,15 +1565,17 @@ class KTRetriever:
             # 调用FAISS检索器执行双路径检索，获取与问题嵌入最相似的三元组
             # question_embed: 查询问题的嵌入向量
             # top_k: 返回的三元组数量，使用类中设置的top_k参数
+            logger.info("开始双路径检索")
             faiss_results = self.faiss_retriever.dual_path_retrieval(
                 question_embed,
                 top_k=self.top_k
             )
+            logger.info("双路径检索完成")
 
             # 从FAISS检索结果中提取带评分的三元组列表
             # 如果没有找到相关三元组，则返回空列表
             scored_triples = faiss_results.get("scored_triples", [])
-            
+
             return {
                 "scored_triples": scored_triples
             }
@@ -1583,7 +1599,7 @@ class KTRetriever:
         # 如果可用，使用预计算的缓存
         if hasattr(self, '_node_text_cache') and node in self._node_text_cache:
             return self._node_text_cache[node]
-        
+
         try:
             # 检查节点是否存在于图谱中
             if node not in self.graph.nodes:
@@ -1621,9 +1637,9 @@ class KTRetriever:
             # 如果有缓存，则将结果存入缓存
             if hasattr(self, '_node_text_cache'):
                 self._node_text_cache[node] = result
-                
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error getting text for node {node}: {str(e)}")
             return f"[Error Node: {node}]"
@@ -1688,7 +1704,8 @@ class KTRetriever:
                 tail_props = self._get_node_properties(t)
 
                 # 检查节点文本是否有效（不为空且不以'[Error'开头）
-                if head_text and tail_text and not head_text.startswith('[Error') and not tail_text.startswith('[Error'):
+                if head_text and tail_text and not head_text.startswith('[Error') and not tail_text.startswith(
+                        '[Error'):
                     # 构造包含属性信息的三元组文本表示
                     triple_text = f"({head_text} {head_props}, {r}, {tail_text} {tail_props})"
                     triple_texts.append(triple_text)
@@ -1725,7 +1742,8 @@ class KTRetriever:
                 tail_props = self._get_node_properties(t)
 
                 # 检查节点文本是否有效（不为空且不以'[Error'开头）
-                if head_text and tail_text and not head_text.startswith('[Error') and not tail_text.startswith('[Error'):
+                if head_text and tail_text and not head_text.startswith('[Error') and not tail_text.startswith(
+                        '[Error'):
                     triple_text = f"({head_text} {head_props}, {r}, {tail_text} {tail_props}) [score: {score:.3f}]"
                     triples.append(triple_text)
                     # 构造包含属性信息和评分的三元组文本表示
@@ -1734,7 +1752,7 @@ class KTRetriever:
             except Exception as e:
                 logger.error(f"Warning: Error processing scored triple ({h}, {r}, {t}): {str(e)}")
                 continue
-        
+
         return triples
 
     def _parse_triple_string(self, triple: str) -> tuple[str, str, str, str]:
@@ -1752,14 +1770,14 @@ class KTRetriever:
 
         # 移除首尾的括号，获取内容部分
         content = triple[1:-1]  # Remove parentheses
-        
+
         # 初始化评分部分为空字符串
         score_part = ""
         # 如果内容中包含评分信息，则提取评分部分
         if ' [score:' in content:
             content, score_suffix = content.split(' [score:', 1)
             score_part = f" [score:{score_suffix}"
-        
+
         # 按逗号分割内容，同时考虑方括号的嵌套情况
         parts = self._split_respecting_brackets(content)
 
@@ -1774,9 +1792,9 @@ class KTRetriever:
 
         # 从头实体中提取实体名称（去除属性部分）
         head_name = head.split(' [')[0] if ' [' in head else head
-        
+
         return head_name, relation, tail, score_part
-    
+
     def _split_respecting_brackets(self, content: str) -> List[str]:
         """
         按逗号分割内容，同时考虑方括号嵌套，确保不会在属性部分错误分割
@@ -1791,7 +1809,7 @@ class KTRetriever:
         current_part = ""
         bracket_count = 0
         comma_count = 0
-        
+
         for i, char in enumerate(content):
             if char == '[':
                 bracket_count += 1
@@ -1802,19 +1820,19 @@ class KTRetriever:
                 current_part = ""
                 comma_count += 1
                 if comma_count == 2:  # After finding 2 commas, rest is tail
-                    remaining = content[i+1:].strip()
+                    remaining = content[i + 1:].strip()
                     if remaining:
                         parts.append(remaining)
                     break
                 continue
             current_part += char
-        
+
         # Add final part if we haven't reached 3 parts yet
         if len(parts) < 3 and current_part.strip():
             parts.append(current_part.strip())
-            
+
         return parts
-    
+
     def _build_merged_triple(self, entity_name: str, relation: str, values: List[str]) -> str:
         """
         从实体、关系和值列表构建合并的三元组字符串
@@ -1846,7 +1864,7 @@ class KTRetriever:
             合并属性后的三元组列表
         """
         start_time = time.time()
-        
+
         # Use defaultdict for cleaner nested dictionary handling
         from collections import defaultdict
         # 创建嵌套的defaultdict，结构为{实体名: {关系: [值列表]}}
@@ -1861,7 +1879,7 @@ class KTRetriever:
                 if head_name and relation and tail is not None:
                     # 将值（包括评分部分）添加到对应实体和关系的列表中
                     entity_attributes[head_name][relation].append(tail + score_part)
-                    
+
             except Exception as e:
                 logger.error(f"Error processing triple {triple}: {str(e)}")
                 continue
@@ -1875,12 +1893,13 @@ class KTRetriever:
             # 遍历实体的所有关系
             for relation, values in relations.items()
         ]
-        
+
         elapsed = time.time() - start_time
         logger.info(f"[StepTiming] step=_merge_entity_attributes time={elapsed:.4f}")
         return merged_triples
 
-    def _process_chunk_results(self, chunk_results: Dict, question_embed: torch.Tensor, top_k: int) -> Tuple[List[str], set]:
+    def _process_chunk_results(self, chunk_results: Dict, question_embed: torch.Tensor, top_k: int) -> Tuple[
+        List[str], set]:
         """
         处理文本块检索结果，返回格式化的结果和文本块ID集合
 
@@ -1901,7 +1920,7 @@ class KTRetriever:
         chunk_ids = reranked_results.get('chunk_ids', [])
         chunk_scores = reranked_results.get('scores', [])
         chunk_contents = reranked_results.get('chunk_contents', [])
-        
+
         formatted_results = []
         chunk_id_set = set()
 
@@ -1912,10 +1931,11 @@ class KTRetriever:
             formatted_results.append(formatted_result)
             # 将文本块ID添加到集合中
             chunk_id_set.add(chunk_id)
-            
+
         return formatted_results, chunk_id_set
-    
-    def _collect_all_scored_triples(self, results: Dict, question_embed: torch.Tensor) -> List[Tuple[str, str, str, float]]:
+
+    def _collect_all_scored_triples(self, results: Dict, question_embed: torch.Tensor) -> List[
+        Tuple[str, str, str, float]]:
         """
         收集并合并来自两个路径的所有带评分三元组
 
@@ -1927,12 +1947,12 @@ class KTRetriever:
             按评分排序的带评分三元组列表，格式为(头节点, 关系, 尾节点, 评分)
         """
         all_scored_triples = []
-        
+
         # 添加路径2的带评分三元组（如果存在）
         path2_scored = results['path2_results'].get('scored_triples', [])
         if path2_scored:
             all_scored_triples.extend(path2_scored)
-        
+
         # 添加路径1的重新排序三元组
         path1_triples = results['path1_results'].get('one_hop_triples', [])
         if path1_triples:
@@ -1943,7 +1963,7 @@ class KTRetriever:
         # 按评分降序排序并返回
         all_scored_triples.sort(key=lambda x: x[3], reverse=True)
         return all_scored_triples
-    
+
     def _format_scored_triples(self, scored_triples: List[Tuple[str, str, str, float]]) -> List[str]:
         """
         将带评分的三元组格式化为包含节点属性的可读文本
@@ -1979,7 +1999,7 @@ class KTRetriever:
 
         # 返回所有格式化后的三元组文本列表
         return formatted_triples
-    
+
     def _extract_chunk_ids_from_triples(self, scored_triples: List[Tuple[str, str, str, float]]) -> set:
         """
         从带评分的三元组中提取节点关联的文本块ID
@@ -2006,9 +2026,9 @@ class KTRetriever:
                 chunk_id = self._get_node_chunk_id(self.graph.nodes[t])
                 if chunk_id:
                     chunk_ids.add(str(chunk_id))
-                    
+
         return chunk_ids
-    
+
     def _get_node_chunk_id(self, node_data: dict) -> str:
         """
         从节点数据中提取文本块ID，兼容新旧两种数据结构格式
@@ -2026,7 +2046,7 @@ class KTRetriever:
         # 如果没有properties字段或者不是字典，则使用旧版本的数据结构格式
         # 在旧格式中，'chunk id'字段直接位于节点数据的顶层
         return node_data.get('chunk id')
-    
+
     def _get_matching_chunks(self, chunk_ids: set) -> List[str]:
         """
         根据给定的文本块ID集合获取对应的文本块内容
@@ -2041,7 +2061,8 @@ class KTRetriever:
         # chunk2id是一个字典，存储了文本块ID到文本内容的映射关系
         return [self.chunk2id[chunk_id] for chunk_id in chunk_ids if chunk_id in self.chunk2id]
 
-    def process_retrieval_results(self, question: str, top_k: int = 20, involved_types: dict = None) -> Tuple[Dict, float]:
+    def process_retrieval_results(self, question: str, top_k: int = 20, involved_types: dict = None) -> Tuple[
+        Dict, float]:
         """
         处理检索结果，使用优化的结构和辅助方法
 
@@ -2068,11 +2089,11 @@ class KTRetriever:
         logger.info(f"retrieval time: {retrieval_time:.4f}")
 
         # path1_triples = self._extract_triple_based_info(results['path1_results']['one_hop_triples'])
-        
+
         # path2_triples = []
         # if results['path2_results'].get('scored_triples'):
         #     path2_triples = self._extract_scored_triple_info(results['path2_results']['scored_triples'])
-        
+
         # Merge entity attributes for both paths
         # merged_path1 = self._merge_entity_attributes(path1_triples)
         # merged_path2 = self._merge_entity_attributes(path2_triples)
@@ -2089,7 +2110,7 @@ class KTRetriever:
         all_scored_triples = self._collect_all_scored_triples(results, question_embed)
         # 限制三元组数量为top_k
         limited_scored_triples = all_scored_triples[:top_k]
-        
+
         # 格式化带评分的三元组，使其更易读
         formatted_triples = self._format_scored_triples(limited_scored_triples)
         # 从三元组中提取文本块ID
@@ -2111,7 +2132,8 @@ class KTRetriever:
         # 返回检索结果和检索时间
         return retrieval_results, retrieval_time
 
-    def process_subquestions_parallel(self, sub_questions: List[Dict], top_k: int = 10, involved_types: dict = None) -> Tuple[Dict, float]:
+    def process_subquestions_parallel(self, sub_questions: List[Dict], top_k: int = 10, involved_types: dict = None) -> \
+            Tuple[Dict, float]:
         """
         并行处理多个子问题的检索任务
 
@@ -2135,7 +2157,7 @@ class KTRetriever:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 提交所有子问题处理任务到线程池
             future_to_subquestion = {
-                executor.submit(self._process_single_subquestion, sub_q, top_k, involved_types): sub_q 
+                executor.submit(self._process_single_subquestion, sub_q, top_k, involved_types): sub_q
                 for sub_q in sub_questions
             }
 
@@ -2165,7 +2187,7 @@ class KTRetriever:
 
                     # 添加子问题结果到总结果列表
                     all_sub_question_results.append(sub_result['sub_result'])
-                        
+
                 # except Exception as e:
                 #     logger.error(f"Error processing sub-question: {str(e)}")
                 #     with threading.Lock():
@@ -2182,14 +2204,14 @@ class KTRetriever:
         dedup_chunk_ids = list(all_chunk_ids)
 
         # 构建去重后的文本块内容字典，对于缺失内容提供默认值
-        dedup_chunk_contents = {chunk_id: all_chunk_contents.get(chunk_id, f"[Missing content for chunk {chunk_id}]") 
-                               for chunk_id in dedup_chunk_ids}
+        dedup_chunk_contents = {chunk_id: all_chunk_contents.get(chunk_id, f"[Missing content for chunk {chunk_id}]")
+                                for chunk_id in dedup_chunk_ids}
 
         # 如果没有找到任何相关信息，提供默认提示信息
         if not dedup_triples and not dedup_chunk_contents:
             dedup_triples = ["No relevant information found"]
             dedup_chunk_contents = {"no_chunks": "No relevant chunks found"}
-        
+
         total_time = time.time() - start_time
 
         # 返回聚合结果和总处理时间
@@ -2271,7 +2293,7 @@ class KTRetriever:
             'chunk_contents': chunk_contents_dict,  # 文本块内容字典
             'sub_result': sub_result  # 子问题统计信息
         }
-            
+
         # except Exception as e:
         #     logger.error(f"Error processing sub-question '{sub_question_text}': {str(e)}")
         #     return {
@@ -2341,26 +2363,41 @@ class KTRetriever:
                 """
             else:
                 # 通用数据集的硬编码提示模板
+                # prompt = f"""
+                # You are an expert knowledge assistant. Your task is to answer the question based on the provided knowledge context.
+                #
+                # 1. Use ONLY the information from the provided knowledge context and try your best to answer the question.
+                # 2. If the knowledge is insufficient, reject to answer the question.
+                # 3. Be precise and concise in your answer
+                # 4. For factual questions, provide the specific fact or entity name
+                # 5. For temporal questions, provide the specific date, year, or time period
+                #
+                # Question: {question}
+                #
+                # Knowledge Context:
+                # {context}
+                #
+                # Answer (be specific and direct):
+                # """
                 prompt = f"""
-                You are an expert knowledge assistant. Your task is to answer the question based on the provided knowledge context.
-
-                1. Use ONLY the information from the provided knowledge context and try your best to answer the question.
-                2. If the knowledge is insufficient, reject to answer the question.
-                3. Be precise and concise in your answer
-                4. For factual questions, provide the specific fact or entity name
-                5. For temporal questions, provide the specific date, year, or time period
-
-                Question: {question}
-
-                Knowledge Context:
-                {context}
-
-                Answer (be specific and direct):
+                你是知识问答助手，你的任务是根据提供的知识上下文回答问题。
+                        
+                        1. 仅使用提供的知识上下文中的信息来回答问题
+                        2. 如果知识不足，请说明无法回答
+                        3. 回答应精确简洁
+                        4. 对于事实性问题，提供具体的事实或实体名称
+                        5. 对于时间性问题，提供具体的日期、年份或时间段
+                        
+                        问题：{question}
+                        
+                        知识上下文：
+                        {context}
+                        
+                        答案（精确直接）：
                 """
             # 返回生成的提示
             return prompt
 
-    
     def generate_answer(self, prompt: str) -> str:
         """
             调用LLM API生成基于给定提示的答案
@@ -2379,7 +2416,6 @@ class KTRetriever:
         logger.info(f"Answer: {answer}")
         # 返回LLM生成的答案
         return answer
-
 
     def _extract_chunk_ids_from_nodes(self, nodes: List[str]) -> set:
         """
@@ -2405,8 +2441,8 @@ class KTRetriever:
                     # 新格式：chunk id嵌套在properties字典中
                     # 旧格式：chunk id直接在节点数据顶层
                     chunk_id = (
-                        data.get('properties', {}).get('chunk id') 
-                        if isinstance(data.get('properties'), dict) 
+                        data.get('properties', {}).get('chunk id')
+                        if isinstance(data.get('properties'), dict)
                         else data.get('chunk id')
                     )
                     # 如果找到了文本块ID，则添加到集合中
@@ -2443,8 +2479,8 @@ class KTRetriever:
                     # 获取头节点数据
                     data = self.graph.nodes[h]
                     chunk_id = (
-                        data.get('properties', {}).get('chunk id') 
-                        if isinstance(data.get('properties'), dict) 
+                        data.get('properties', {}).get('chunk id')
+                        if isinstance(data.get('properties'), dict)
                         else data.get('chunk id')
                     )
                     if chunk_id:
@@ -2453,15 +2489,15 @@ class KTRetriever:
                 if t in self.graph.nodes:
                     data = self.graph.nodes[t]
                     chunk_id = (
-                        data.get('properties', {}).get('chunk id') 
-                        if isinstance(data.get('properties'), dict) 
+                        data.get('properties', {}).get('chunk id')
+                        if isinstance(data.get('properties'), dict)
                         else data.get('chunk id')
                     )
                     if chunk_id:
                         chunk_ids.add(str(chunk_id))
             except Exception as e:
                 continue
-        
+
         return chunk_ids
 
     def _enhance_query_with_entities(self, question: str) -> str:
@@ -2475,7 +2511,7 @@ class KTRetriever:
         返回:
             包含实体信息的增强查询
         """
-        
+
         try:
             # 使用spaCy处理问题文本，生成文档对象
             doc = self.nlp(question)
@@ -2510,7 +2546,7 @@ class KTRetriever:
 
             # 返回增强后的查询
             return enhanced_query
-            
+
         except Exception as e:
             logger.error(f"Error enhancing query: {str(e)}")
             return question
@@ -2527,7 +2563,7 @@ class KTRetriever:
         返回:
             相似度分数
     """
-        
+
         try:
             if node not in self.graph.nodes:
                 return 0.0
@@ -2552,7 +2588,7 @@ class KTRetriever:
 
             # 返回相似度分数
             return similarity
-            
+
         except Exception as e:
             logger.error(f"Error calculating entity similarity for node {node}: {str(e)}")
             return 0.0
@@ -2598,7 +2634,7 @@ class KTRetriever:
                 for i, node in enumerate(valid_nodes):
                     similarity = max(0.0, batch_similarities[i].item())
                     similarities[node] = similarity
-                        
+
             except Exception as e:
                 # 如果批量计算失败，回退到逐个计算
                 for node in valid_nodes:
@@ -2618,10 +2654,11 @@ class KTRetriever:
                 except Exception as e:
                     logger.error(f"Error calculating similarity for node {node}: {str(e)}")
                     continue
-            
+
         return similarities
 
-    def _smart_neighbor_expansion(self, center_node: str, query_embed: torch.Tensor, max_neighbors: int = 5) -> List[str]:
+    def _smart_neighbor_expansion(self, center_node: str, query_embed: torch.Tensor, max_neighbors: int = 5) -> List[
+        str]:
         """
         优化的智能邻居扩展，使用批量相似度计算
 
@@ -2652,15 +2689,16 @@ class KTRetriever:
 
         # 根据相似度对邻居节点进行降序排序
         sorted_neighbors = sorted(
-            neighbor_similarities.items(), 
-            key=lambda x: x[1], 
+            neighbor_similarities.items(),
+            key=lambda x: x[1],
             reverse=True
         )
 
         # 返回前max_neighbors个相似度大于0.1的邻居节点
         return [node for node, score in sorted_neighbors[:max_neighbors] if score > 0.1]
 
-    def _rerank_triples_by_relevance(self, triples: List[Tuple[str, str, str]], question_embed: torch.Tensor) -> List[Tuple[str, str, str, float]]:
+    def _rerank_triples_by_relevance(self, triples: List[Tuple[str, str, str]], question_embed: torch.Tensor) -> List[
+        Tuple[str, str, str, float]]:
         """
     优化的三元组重排序，使用批量编码和增强缓存
 
@@ -2695,14 +2733,14 @@ class KTRetriever:
                 triple_text = f"{head_text} {r} {tail_text}"
                 triple_texts.append(triple_text)
                 valid_triples.append((h, r, t))
-                
+
             except Exception as e:
                 logger.error(f"Error processing triple ({h}, {r}, {t}): {str(e)}")
                 continue
-        
+
         if not valid_triples:
             return []
-        
+
         try:
             # 批量编码三元组文本
             encode_start = time.time()
@@ -2713,8 +2751,8 @@ class KTRetriever:
             # 批量计算相似度
             sim_calc_start = time.time()
             similarities = F.cosine_similarity(
-                question_embed.unsqueeze(0), 
-                triple_embeddings, 
+                question_embed.unsqueeze(0),
+                triple_embeddings,
                 dim=1
             )
             sim_calc_elapsed = time.time() - sim_calc_start
@@ -2731,10 +2769,10 @@ class KTRetriever:
 
                 # 计算最终评分（相似度+关系加权）
                 final_score = max(0.0, similarity + relation_bonus)
-                
+
                 if final_score > 0.05:
                     scored_triples.append((h, r, t, final_score))
-                                        
+
         except Exception as e:
             logger.error(f"Error in batch triple encoding: {str(e)}")
             # 出错时回退到逐个处理的方法
@@ -2745,8 +2783,9 @@ class KTRetriever:
         elapsed = time.time() - start_time
         logger.info(f"[StepTiming] step=_rerank_triples_by_relevance time={elapsed:.4f}")
         return scored_triples
-    
-    def _rerank_triples_individual(self, triples: List[Tuple[str, str, str]], question_embed: torch.Tensor) -> List[Tuple[str, str, str, float]]:
+
+    def _rerank_triples_individual(self, triples: List[Tuple[str, str, str]], question_embed: torch.Tensor) -> List[
+        Tuple[str, str, str, float]]:
         """
     当批量处理失败时，回退到单独处理每个三元组的方法
 
@@ -2765,7 +2804,7 @@ class KTRetriever:
                 # 获取头节点和尾节点的文本表示
                 head_text = self._get_node_text(h)
                 tail_text = self._get_node_text(t)
-                
+
                 if not head_text or not tail_text or head_text.startswith('[Error') or tail_text.startswith('[Error'):
                     continue
 
@@ -2783,10 +2822,10 @@ class KTRetriever:
 
                 # 计算最终评分（相似度+关系加权）
                 final_score = max(0.0, similarity + relation_bonus)
-                
+
                 if final_score > 0.05:
                     scored_triples.append((h, r, t, final_score))
-                    
+
             except Exception as e:
                 logger.error(f"Error reranking triple ({h}, {r}, {t}): {str(e)}")
                 continue
@@ -2816,7 +2855,7 @@ class KTRetriever:
                 # 过滤条件：非停用词且长度大于2
                 if (not token.is_stop and len(token.text) > 2):
                     # 如果是命名实体，添加到关键词列表
-                    if token.ent_type_: 
+                    if token.ent_type_:
                         keywords.append(token.text.lower())
                     # 如果是名词、专有名词或形容词，添加到关键词列表
                     elif token.pos_ in ['NOUN', 'PROPN', 'ADJ']:
@@ -2833,7 +2872,7 @@ class KTRetriever:
             # 去重并转换为列表
             unique_keywords = list(set(keywords))
             return unique_keywords
-            
+
         except Exception as e:
             logger.error(f"Error extracting keywords: {str(e)}")
             return []
@@ -2872,15 +2911,15 @@ class KTRetriever:
                     relevant_nodes.update(keyword_nodes)
                 else:
                     continue
-                
-                if len(relevant_nodes) > 200: 
+
+                if len(relevant_nodes) > 200:
                     break
             return list(relevant_nodes)
         else:
             # 如果不使用精确匹配，则调用原始的关键词搜索方法
             result = self._keyword_based_node_search_original(keywords)
             return result
-    
+
     def _keyword_based_node_search_original(self, keywords: List[str]) -> List[str]:
         """
         基于关键词的原始节点搜索方法，使用子字符串匹配
@@ -2906,13 +2945,13 @@ class KTRetriever:
                     if keyword in node_text:
                         # 如果找到匹配，将节点添加到相关节点列表中
                         relevant_nodes.append(node)
-                        break 
-                        
+                        break
+
             except Exception as e:
                 continue
-        
+
         return relevant_nodes
-    
+
     def _build_node_text_index(self):
         """
         构建节点文本的倒排索引以加速关键词搜索。
@@ -2923,7 +2962,7 @@ class KTRetriever:
         if self._load_node_text_index():
             logger.info("Loaded node text index from cache")
             return
-        
+
         start_time = time.time()
         logger.info("Building optimized node text index for keyword search...")
         # 初始化节点文本索引字典
@@ -2967,7 +3006,7 @@ class KTRetriever:
             except Exception as e:
                 logger.error(f"Error indexing node {node}: {str(e)}")
                 continue
-        
+
         end_time = time.time()
         logger.info(f"Time taken to build node text index: {end_time - start_time} seconds")
 
@@ -2982,7 +3021,7 @@ class KTRetriever:
             if not self._node_text_index:
                 logger.warning("No node text index to save!")
                 return False
-                
+
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
 
             # 创建可序列化的索引字典
@@ -2995,11 +3034,12 @@ class KTRetriever:
             # 以二进制写入模式打开文件，使用pickle序列化保存索引
             with open(cache_path, 'wb') as f:
                 pickle.dump(serializable_index, f)
-            
+
             file_size = os.path.getsize(cache_path)
-            logger.info(f"Saved node text index with {len(serializable_index)} words to {cache_path} (size: {file_size} bytes)")
+            logger.info(
+                f"Saved node text index with {len(serializable_index)} words to {cache_path} (size: {file_size} bytes)")
             return True
-                
+
         except Exception as e:
             logger.error(f"Error saving node text index: {e}")
             return False
@@ -3011,7 +3051,7 @@ class KTRetriever:
         if os.path.exists(cache_path):
             try:
                 file_size = os.path.getsize(cache_path)
-                if file_size < 1000: 
+                if file_size < 1000:
                     logger.warning(f"Cache file too small ({file_size} bytes), likely empty or corrupted")
                     return False
 
@@ -3035,10 +3075,11 @@ class KTRetriever:
                 if not self._check_text_index_consistency():
                     logger.info("Text index inconsistent with current graph, will rebuild")
                     return False
-                
-                logger.info(f"Loaded node text index with {len(self._node_text_index)} words from {cache_path} (file size: {file_size} bytes)")
+
+                logger.info(
+                    f"Loaded node text index with {len(self._node_text_index)} words from {cache_path} (file size: {file_size} bytes)")
                 return True
-                
+
             except Exception as e:
                 logger.error(f"Error loading node text index: {e}")
                 try:
@@ -3070,16 +3111,18 @@ class KTRetriever:
             extra_nodes = indexed_nodes - current_nodes
             # 如果多余节点数量超过当前图节点数量的10%，记录警告并返回False
             if len(extra_nodes) > len(current_nodes) * 0.1:  # Allow 10% tolerance
-                logger.warning(f"Text index has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
+                logger.warning(
+                    f"Text index has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
                 return False
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error checking text index consistency: {e}")
             return False
 
-    def _path_based_search(self, start_nodes: List[str], target_keywords: List[str], max_depth: int = 2) -> List[Tuple[str, str, str]]:
+    def _path_based_search(self, start_nodes: List[str], target_keywords: List[str], max_depth: int = 2) -> List[
+        Tuple[str, str, str]]:
         """
         从起始节点搜索到包含目标关键词的节点的路径。
 
@@ -3094,7 +3137,7 @@ class KTRetriever:
         # 初始化存储找到的三元组列表和已访问节点集合
         found_triples = []
         visited = set()
-        
+
         def dfs_search(node: str, depth: int, path: List[str]):
             """
             深度优先搜索函数
@@ -3109,7 +3152,7 @@ class KTRetriever:
 
             # 标记当前节点为已访问
             visited.add(node)
-            
+
             try:
                 # 获取当前节点的文本并转换为小写
                 node_text = self._get_node_text(node).lower()
@@ -3128,7 +3171,8 @@ class KTRetriever:
                                 found_triples.append((u, relation, v))
                         break
             except Exception as e:
-                logger.warning(f"Error during DFS path search at node {start_node if 'start_node' in locals() else ''}: {type(e).__name__}: {e}")
+                logger.warning(
+                    f"Error during DFS path search at node {start_node if 'start_node' in locals() else ''}: {type(e).__name__}: {e}")
 
             # 如果未达到最大深度，继续搜索邻居节点
             if depth < max_depth:
@@ -3152,7 +3196,7 @@ class KTRetriever:
         with self.precompute_lock:
             if self.chunk_embeddings_precomputed:
                 return
-            
+
             logger.info("Precomputing chunk embeddings for direct chunk retrieval...")
             # 尝试从磁盘加载文本块嵌入缓存
             if self._load_chunk_embedding_cache():
@@ -3164,7 +3208,7 @@ class KTRetriever:
             if not self.chunk2id:
                 logger.info("Warning: No chunks available for embedding computation")
                 return
-            
+
             logger.info("Computing chunk embeddings from scratch...")
 
             # 获取所有文本块ID和对应的文本内容
@@ -3185,7 +3229,7 @@ class KTRetriever:
                 # 获取当前批次的文本和对应的文本块ID
                 batch_texts = chunk_texts[i:i + batch_size]
                 batch_chunk_ids = chunk_ids[i:i + batch_size]
-                
+
                 try:
                     # 使用qa_encoder对整个批次的文本进行编码
                     batch_embeddings = self.qa_encoder.encode(batch_texts, convert_to_tensor=True)
@@ -3196,10 +3240,10 @@ class KTRetriever:
                         embeddings_list.append(batch_embeddings[j].cpu().numpy())
                         valid_chunk_ids.append(chunk_id)
                         total_processed += 1
-                        
+
                 except Exception as e:
                     # 如果批处理编码失败，记录错误并回退到逐个文本块编码
-                    logger.error(f"Error encoding chunk batch {i//batch_size}: {str(e)}")
+                    logger.error(f"Error encoding chunk batch {i // batch_size}: {str(e)}")
                     for j, chunk_id in enumerate(batch_chunk_ids):
                         try:
                             # 对单个文本块进行编码
@@ -3229,15 +3273,16 @@ class KTRetriever:
                     for i, chunk_id in enumerate(valid_chunk_ids):
                         self.chunk_id_to_index[chunk_id] = i  # 文本块ID到索引位置的映射
                         self.index_to_chunk_id[i] = chunk_id  # 索引位置到文本块ID的映射
-                    
+
                     logger.info(f"FAISS index built with {len(valid_chunk_ids)} chunks")
-                    
+
                 except Exception as e:
                     logger.error(f"Error building FAISS index for chunks: {str(e)}")
 
             # 标记文本块嵌入预计算完成
             self.chunk_embeddings_precomputed = True
-            logger.info(f"Chunk embeddings precomputed for {total_processed} chunks (cache size: {len(self.chunk_embedding_cache)})")
+            logger.info(
+                f"Chunk embeddings precomputed for {total_processed} chunks (cache size: {len(self.chunk_embedding_cache)})")
 
             # 尝试将文本块嵌入缓存保存到磁盘
             self._save_chunk_embedding_cache()
@@ -3248,7 +3293,7 @@ class KTRetriever:
         try:
             if not self.chunk_embedding_cache:
                 return False
-                
+
             os.makedirs(os.path.dirname(cache_path), exist_ok=True)
 
             # 创建用于保存到磁盘的numpy缓存字典
@@ -3266,10 +3311,10 @@ class KTRetriever:
                             numpy_cache[chunk_id] = np.array(embed)
                     except Exception as e:
                         continue
-            
+
             if not numpy_cache:
                 return False
-            
+
             try:
                 # 创建用于PyTorch保存的张量缓存字典
                 tensor_cache = {}
@@ -3288,11 +3333,12 @@ class KTRetriever:
                 # 使用numpy的压缩格式保存
                 np.savez_compressed(cache_path_npz, **numpy_cache)
                 cache_path = cache_path_npz
-            
+
             file_size = os.path.getsize(cache_path)
-            logger.info(f"Saved chunk embedding cache with {len(numpy_cache)} entries to {cache_path} (size: {file_size} bytes)")
+            logger.info(
+                f"Saved chunk embedding cache with {len(numpy_cache)} entries to {cache_path} (size: {file_size} bytes)")
             return True
-                
+
         except Exception as e:
             return False
 
@@ -3306,7 +3352,7 @@ class KTRetriever:
             try:
                 # 使用numpy加载压缩的.npyz文件
                 numpy_cache = np.load(cache_path_npz)
-                
+
                 if len(numpy_cache.files) == 0:
                     return False
 
@@ -3327,10 +3373,11 @@ class KTRetriever:
 
                 # 关闭numpy缓存文件
                 numpy_cache.close()
-                
-                logger.info(f"Loaded chunk embedding cache with {len(self.chunk_embedding_cache)} entries from {cache_path_npz}")
+
+                logger.info(
+                    f"Loaded chunk embedding cache with {len(self.chunk_embedding_cache)} entries from {cache_path_npz}")
                 return True
-                
+
             except Exception as e:
                 logger.error(f"Failed to load chunk embedding cache from {cache_path_npz}: {e}")
                 return False
@@ -3339,7 +3386,7 @@ class KTRetriever:
         if os.path.exists(cache_path):
             try:
                 file_size = os.path.getsize(cache_path)
-                if file_size < 1000:  
+                if file_size < 1000:
                     return False
 
                 # 尝试使用PyTorch加载.pt文件
@@ -3378,12 +3425,12 @@ class KTRetriever:
                                 embed_tensor = torch.from_numpy(embed).float()
                             else:
                                 embed_tensor = embed.cpu() if hasattr(embed, 'cpu') else embed
-                            
+
                             if self.device == "cuda" and torch.cuda.is_available():
                                 embed_tensor = embed_tensor.to(self.device)
                             else:
                                 embed_tensor = embed_tensor.to("cpu")
-                                
+
                             self.chunk_embedding_cache[chunk_id] = embed_tensor
                         except Exception as e:
                             logger.error(f"Warning: Failed to load chunk embedding for {chunk_id}: {e}")
@@ -3415,17 +3462,18 @@ class KTRetriever:
                         for i, chunk_id in enumerate(valid_chunk_ids):
                             self.chunk_id_to_index[chunk_id] = i
                             self.index_to_chunk_id[i] = chunk_id
-                        
+
                     except Exception as e:
                         return False
 
                 # 检查加载的缓存与当前数据是否一致
                 if not self._check_chunk_cache_consistency():
                     return False
-                
-                logger.info(f"Loaded chunk embedding cache with {len(self.chunk_embedding_cache)} entries from {cache_path} (file size: {file_size} bytes)")
+
+                logger.info(
+                    f"Loaded chunk embedding cache with {len(self.chunk_embedding_cache)} entries from {cache_path} (file size: {file_size} bytes)")
                 return True
-                
+
             except Exception as e:
                 logger.error(f"Error loading chunk embedding cache: {e}")
                 try:
@@ -3455,11 +3503,12 @@ class KTRetriever:
             extra_chunks = cached_chunk_ids - current_chunk_ids
             # 如果多余文本块数量超过当前文本块总数的10%，记录日志并返回False
             if len(extra_chunks) > len(current_chunk_ids) * 0.1:
-                logger.info(f"Chunk cache has too many extra chunks: {len(extra_chunks)} extra vs {len(current_chunk_ids)} current")
+                logger.info(
+                    f"Chunk cache has too many extra chunks: {len(extra_chunks)} extra vs {len(current_chunk_ids)} current")
                 return False
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error checking chunk cache consistency: {e}")
             return False
@@ -3501,13 +3550,13 @@ class KTRetriever:
                         chunk_contents.append(self.chunk2id[chunk_id])
                     else:
                         chunk_contents.append(f"[Missing content for chunk {chunk_id}]")
-            
+
             return {
                 "chunk_ids": chunk_ids,
                 "scores": similarity_scores,
                 "chunk_contents": chunk_contents
             }
-            
+
         except Exception as e:
             logger.error(f"Error in chunk embedding retrieval: {str(e)}")
             return {
@@ -3533,7 +3582,7 @@ class KTRetriever:
             chunk_ids = chunk_results.get('chunk_ids', [])
             original_scores = chunk_results.get('scores', [])
             chunk_contents = chunk_results.get('chunk_contents', [])
-            
+
             if not chunk_ids or not chunk_contents:
                 return chunk_results
 
@@ -3556,7 +3605,7 @@ class KTRetriever:
 
                     # 将文本块信息和综合评分添加到列表中,
                     chunk_similarities.append((chunk_id, content, combined_score, i))
-                    
+
                 except Exception as e:
                     logger.error(f"Error calculating similarity for chunk {chunk_id}: {str(e)}")
                     faiss_score = original_scores[i] if i < len(original_scores) else 0.0

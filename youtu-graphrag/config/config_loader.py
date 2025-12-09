@@ -43,7 +43,8 @@ class ConstructionConfig:
 @dataclass
 class TreeCommConfig:
     """Tree-Comm algorithm configuration"""
-    embedding_model: str = "all-MiniLM-L6-v2"
+    # embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "BAAI/bge-m3"
     struct_weight: float = 0.3
     enable_fast_mode: bool = True
 
@@ -85,10 +86,11 @@ class RetrievalConfig:
 @dataclass
 class EmbeddingsConfig:
     """Embeddings configuration"""
-    model_name: str = "all-MiniLM-L6-v2"
-    device: str = "cpu"
+    # model_name: str = "all-MiniLM-L6-v2"
+    model_name: str = "BAAI/bge-m3"
+    device: str = "cuda"
     batch_size: int = 32
-    max_length: int = 512
+    max_length: int = 1024
 
 
 @dataclass
@@ -162,7 +164,7 @@ class ConfigManager:
             self._parse_config()
             self._validate_config()
             
-            logger.info(f"Configuration loaded successfully from {self.config_path}")
+            logger.info(f"配置已成功从 {self.config_path} 加载")
             
         except FileNotFoundError:
             raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
@@ -212,9 +214,9 @@ class ConfigManager:
         """Validate the loaded configuration."""
         for dataset_name, dataset_config in self.datasets.items():
             if not os.path.exists(dataset_config.corpus_path):
-                logger.warning(f"Corpus path not found for {dataset_name}: {dataset_config.corpus_path}")
+                logger.warning(f"找不到数据集 {dataset_name} 的语料库路径: {dataset_config.corpus_path}")
             if not os.path.exists(dataset_config.schema_path):
-                logger.warning(f"Schema path not found for {dataset_name}: {dataset_config.schema_path}")
+                logger.warning(f"找不到数据集 {dataset_name} 的模式路径: {dataset_config.schema_path}")
         
         valid_modes = ["agent", "noagent"]
         if self.triggers.mode not in valid_modes:

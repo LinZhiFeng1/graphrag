@@ -18,7 +18,8 @@ class DualFAISSRetriever:
     """
     基于 FAISS（Facebook AI Similarity Search）向量搜索引擎的知识图谱检索系统，它采用双路径检索策略来提高检索效果
     """
-    def __init__(self, dataset, graph: nx.MultiDiGraph, model_name: str = "all-MiniLM-L6-v2", cache_dir: str = "retriever/faiss_cache_new", device: str = None):
+    # def __init__(self, dataset, graph: nx.MultiDiGraph, model_name: str = "all-MiniLM-L6-v2", cache_dir: str = "retriever/faiss_cache_new", device: str = None):
+    def __init__(self, dataset, graph: nx.MultiDiGraph, model_name: str = "BAAI/bge-m3", cache_dir: str = "retriever/faiss_cache_new", device: str = None):
         """
         初始化 DualFAISSRetriever 实例
 
@@ -81,12 +82,12 @@ class DualFAISSRetriever:
         self.model_dim = self.model.get_sentence_embedding_dimension()
         self.dim_transform = None
         # 如果模型输出维度不是 384，则创建线性变换层将其转换为 384 维
-        if self.model_dim != 384:
-            self.dim_transform = torch.nn.Linear(self.model_dim, 384)
-            if self.device.type == "cuda" and torch.cuda.is_available():
-                self.dim_transform = self.dim_transform.to(self.device)
-            else:
-                self.dim_transform = self.dim_transform.to("cpu")
+        # if self.model_dim != 1024:
+        #     self.dim_transform = torch.nn.Linear(self.model_dim, 1024)
+        #     if self.device.type == "cuda" and torch.cuda.is_available():
+        #         self.dim_transform = self.dim_transform.to(self.device)
+        #     else:
+        #         self.dim_transform = self.dim_transform.to("cpu")
 
         # 构建节点名称到节点 ID 的映射，方便后续查找
         self.name_to_id = {}
@@ -219,6 +220,7 @@ class DualFAISSRetriever:
         
         start_time = time.time()
         # 路径1：通过三元组进行检索，获取相关的带分数三元组
+        logger.info("开始检索三元组")
         scored_triples = self.retrieve_via_triples(query_emb, top_k)
 
         # 从带分数的三元组中提取所有涉及的节点（头实体和尾实体）
@@ -235,6 +237,7 @@ class DualFAISSRetriever:
         
         start_time = time.time()
         # 路径2：通过社区进行检索，获取相关的节点
+        logger.info("开始检索社区")
         comm_nodes = self.retrieve_via_communities(query_emb, top_k)
         # 过滤掉图中不存在的节点
         comm_nodes = [node for node in comm_nodes if node in self.graph.nodes]
@@ -246,6 +249,7 @@ class DualFAISSRetriever:
         start_time = time.time()
 
         # 计算合并后节点与查询的相关性分数
+        logger.info("开始计算节点相关性分数")
         node_scores = self._calculate_node_scores_optimized(query_emb, merged_nodes)
         end_time = time.time()
         logger.info(f"Time taken to calculate node scores: {end_time - start_time} seconds")
@@ -356,19 +360,25 @@ class DualFAISSRetriever:
             raise ValueError("Please build triple index first!")
         
         # 确保查询嵌入在正确的设备上并应用维度变换
+        logger.info("确保查询嵌入在正确的设备上并应用维度变换")
         if isinstance(query_embed, torch.Tensor):
             # 如果已经是张量，则移到指定设备
+            logger.info("将查询嵌入移到指定设备")
             query_embed = query_embed.to(self.device)
         else:
             # 如果不是张量，则转换为FloatTensor并移到指定设备
+            logger.info("将查询嵌入转换为FloatTensor并移到指定设备")
             query_embed = torch.FloatTensor(query_embed).to(self.device)
 
         # 对查询嵌入进行维度变换（如果需要的话）
+        logger.info("对查询嵌入进行维度变换（如果需要的话）")
         query_embed = self.transform_vector(query_embed)
         
         # 创建缓存键并执行FAISS搜索
+        logger.info(f"创建缓存键并执行FAISS搜索")
         cache_key = f"triple_search_{hash(query_embed.cpu().numpy().tobytes())}_{top_k}"
         # 使用缓存的FAISS搜索，避免重复计算相同的查询
+        logger.info(f"使用缓存的FAISS搜索，避免重复计算相同的查询")
         D, I = self._cached_faiss_search(self.triple_index, query_embed, top_k, cache_key)
         
         # 从匹配的索引中收集所有三元组，包括原始三元组和它们的邻居三元组
@@ -382,6 +392,7 @@ class DualFAISSRetriever:
         
         logger.info(f"Calling _calculate_triple_relevance_scores with {len(unique_triples)} unique triples")
         # 计算三元组与查询的相关性得分，过滤低相关性的三元组
+        logger.info(f"计算三元组与查询的相关性得分，过滤低相关性的三元组")
         scored_triples = self._calculate_triple_relevance_scores(query_embed, unique_triples, threshold=0.1, top_k=top_k)
 
         logger.info(f"_calculate_triple_relevance_scores returned {len(scored_triples)} scored triples")
@@ -787,7 +798,7 @@ class DualFAISSRetriever:
                 cache_path = cache_path_npz
             
             file_size = os.path.getsize(cache_path)
-            logger.info(f"Saved embedding cache with {len(numpy_cache)} entries to {cache_path} (size: {file_size} bytes)")
+            logger.info(f"已将包含 {len(numpy_cache)} 个条目的嵌入缓存保存到 {cache_path} (大小: {file_size} 字节)")
             return True
                 
         except Exception as e:
@@ -999,12 +1010,13 @@ class DualFAISSRetriever:
         """
         # 如果不是强制重新计算，尝试从磁盘缓存加载节点嵌入
         if not force_recompute:
-            logger.info("Attempting to load node embeddings from disk cache...")
+            logger.info("正在尝试从磁盘缓存加载节点嵌入...")
             if self.load_embedding_cache():
-                logger.info("Successfully loaded node embeddings from disk cache")
+                logger.info("成功从磁盘缓存加载节点嵌入")
                 return
 
-        logger.info("Precomputing node embeddings...")
+        logger.info("正在预计算节点嵌入...")
+
         # 清空当前的节点嵌入缓存
         self.node_embedding_cache.clear()
         
@@ -1012,10 +1024,10 @@ class DualFAISSRetriever:
         all_nodes = list(self.graph.nodes())
         total_nodes = len(all_nodes)
         total_batches = (total_nodes + batch_size - 1) // batch_size
-        
-        logger.info(f"Total nodes to process: {total_nodes}")
-        logger.info(f"Processing in {total_batches} batches of size {batch_size}")
-        
+
+        logger.info(f"总共需要处理的节点数: {total_nodes}")
+        logger.info(f"分 {total_batches} 批处理，每批大小为 {batch_size}")
+
         # 分批处理节点
         total_processed = 0
         for i in range(0, total_nodes, batch_size):
@@ -1024,10 +1036,9 @@ class DualFAISSRetriever:
             
             processed_count = self._process_batch(batch_nodes, batch_num, total_batches)
             total_processed += processed_count
-        
-        # Final summary and cache saving
-        logger.info(f"Successfully precomputed embeddings for {len(self.node_embedding_cache)} nodes")
-        logger.info(f"Processing success rate: {len(self.node_embedding_cache)}/{total_nodes} ({len(self.node_embedding_cache)/total_nodes*100:.1f}%)")
+
+        logger.info(f"成功为 {len(self.node_embedding_cache)} 个节点预计算嵌入")
+        logger.info(f"处理成功率: {len(self.node_embedding_cache)}/{total_nodes} ({len(self.node_embedding_cache) / total_nodes * 100:.1f}%)")
 
         # 如果有节点嵌入被计算出来，则保存到磁盘缓存
         if self.node_embedding_cache:
@@ -1093,10 +1104,10 @@ class DualFAISSRetriever:
                 logger.info("Successfully loaded node embedding cache from disk")
         else:
             # 如果文件不存在或不一致，则重新构建索引和嵌入
-            logger.info("Building FAISS indices and embeddings...")
+            logger.info("正在构建FAISS索引和嵌入...")
             # 如果文件存在但不一致，清除不一致的缓存文件
             if all_exist and not indices_consistent:
-                logger.info("Clearing inconsistent cache files...")
+                logger.info("正在清除不一致的缓存文件...")
                 for path in [node_path, relation_path, triple_path, comm_path, node_embed_path, relation_embed_path, node_map_path]:
                     if os.path.exists(path):
                         os.remove(path)
@@ -1106,7 +1117,7 @@ class DualFAISSRetriever:
             self._build_relation_index()
             self._build_triple_index()
             self._build_community_index()
-            logger.info("FAISS indices and embeddings built successfully!")
+            logger.info("FAISS索引和嵌入构建成功!")
             # 填充嵌入映射
             self._populate_embedding_maps()
 
@@ -1337,17 +1348,17 @@ class DualFAISSRetriever:
         missing_in_embeddings = graph_nodes - embedding_nodes
         # 找出在嵌入映射中存在但在图中不存在的节点
         extra_in_embeddings = embedding_nodes - graph_nodes
-        
+
         if missing_in_embeddings:
-            logger.warning(f"Warning: {len(missing_in_embeddings)} nodes in graph but not in embeddings: {list(missing_in_embeddings)[:5]}...")
-        
+            logger.warning(f"警告: 图中有 {len(missing_in_embeddings)} 个节点在嵌入中缺失: {list(missing_in_embeddings)[:5]}...")
+
         if extra_in_embeddings:
-            logger.warning(f"Warning: {len(extra_in_embeddings)} nodes in embeddings but not in graph: {list(extra_in_embeddings)[:5]}...")
-        
+            logger.warning(f"警告: 嵌入中有 {len(extra_in_embeddings)} 个节点在图中不存在: {list(extra_in_embeddings)[:5]}...")
+
         if not missing_in_embeddings and not extra_in_embeddings:
-            logger.info("✓ Data consistency verified: all graph nodes have embeddings")
+            logger.info("✓ 数据一致性验证通过: 所有图节点都有嵌入")
         else:
-            logger.info(f"✗ Data inconsistency detected: {len(missing_in_embeddings)} missing, {len(extra_in_embeddings)} extra")
+            logger.info(f"✗ 检测到数据不一致: 缺失 {len(missing_in_embeddings)} 个, 多余 {len(extra_in_embeddings)} 个")
 
     def _get_node_text(self, node: str) -> str:
         """
