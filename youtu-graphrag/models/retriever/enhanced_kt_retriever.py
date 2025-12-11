@@ -235,7 +235,7 @@ class KTRetriever:
 
         end_time = time.time()
         logger.info(
-            f"Node texts precomputed for {len(self._node_text_cache)} nodes in {end_time - start_time:.2f} seconds")
+            f"已完成预计算 {len(self._node_text_cache)} 个节点的文本，耗时 {end_time - start_time:.2f} 秒")
 
         # 尝试将计算得到的节点文本缓存保存到磁盘
         try:
@@ -259,7 +259,7 @@ class KTRetriever:
 
             file_size = os.path.getsize(cache_path)
             logger.info(
-                f"Saved node text cache with {len(self._node_text_cache)} entries to {cache_path} (size: {file_size} bytes)")
+                f"已保存包含 {len(self._node_text_cache)} 个条目的节点文本缓存到 {cache_path} (大小: {file_size} 字节)")
             return True
 
         except Exception as e:
@@ -274,7 +274,7 @@ class KTRetriever:
                 file_size = os.path.getsize(cache_path)
                 # 如果文件小于1000字节，认为文件可能为空或已损坏
                 if file_size < 1000:  # Less than 1KB likely empty or corrupted
-                    logger.warning(f"Warning: Cache file too small ({file_size} bytes), likely empty or corrupted")
+                    logger.warning(f"警告: 缓存文件太小 ({file_size} 字节)，可能为空或已损坏")
                     return False
 
                 # 以二进制读取模式打开文件，使用pickle反序列化加载缓存
@@ -283,27 +283,27 @@ class KTRetriever:
 
                 # 检查加载的缓存是否为空
                 if not self._node_text_cache:
-                    logger.warning("Warning: Loaded cache is empty")
+                    logger.warning("警告: 加载的缓存为空")
                     return False
 
                 # 检查加载的缓存与当前图是否一致
                 if not self._check_text_cache_consistency():
-                    logger.warning("Text cache inconsistent with current graph, will rebuild")
+                    logger.warning("文本缓存与当前图不一致，将重新构建")
                     return False
 
                 logger.info(
-                    f"Loaded node text cache with {len(self._node_text_cache)} entries from {cache_path} (file size: {file_size} bytes)")
+                    f"从 {cache_path} 加载了包含 {len(self._node_text_cache)} 个条目的节点文本缓存 (文件大小: {file_size} 字节)")
                 return True
 
             except Exception as e:
-                logger.error(f"Error loading node text cache: {e}")
+                logger.error(f"加载节点文本缓存时出错: {e}")
                 try:
                     os.remove(cache_path)
-                    logger.info(f"Removed corrupted cache file: {cache_path}")
+                    logger.info(f"已移除损坏的缓存文件: {cache_path}")
                 except Exception as e2:
-                    logger.warning(f"Failed to remove corrupted cache file {cache_path}: {type(e2).__name__}: {e2}")
+                    logger.warning(f"无法移除损坏的缓存文件 {cache_path}: {type(e2).__name__}: {e2}")
         else:
-            logger.warning(f"Cache file not found: {cache_path}")
+            logger.warning(f"缓存文件不存在: {cache_path}")
         return False
 
     def _check_text_cache_consistency(self):
@@ -601,8 +601,8 @@ class KTRetriever:
                 if not self._check_embedding_cache_consistency():
                     logger.info("Embedding cache inconsistent with current graph, will rebuild")
                     return False
-
-                logger.info(f"从 {cache_path} 加载了包含 {len(self.node_embedding_cache)} 个条目的节点嵌入缓存 (文件大小: {file_size} 字节)")
+                logger.info(
+                    f"从 {cache_path} 加载了包含 {len(self.node_embedding_cache)} 个条目的节点嵌入缓存 (文件大小: {file_size / 1024:.1f} KB)")
                 return True
 
             except Exception as e:
@@ -610,11 +610,11 @@ class KTRetriever:
                 try:
                     # 尝试删除损坏的缓存文件
                     os.remove(cache_path)
-                    logger.info(f"Removed corrupted cache file: {cache_path}")
+                    logger.info(f"移除损坏的缓存文件: {cache_path}")
                 except Exception as e3:
                     logger.warning(f"Failed to remove corrupted cache file {cache_path}: {type(e3).__name__}: {e3}")
         else:
-            logger.info(f"Cache file not found: {cache_path}")
+            logger.info(f"缓存文件不存在: {cache_path}")
         return False
 
     def _check_embedding_cache_consistency(self):
@@ -688,7 +688,7 @@ class KTRetriever:
             path1_results = self._node_relation_retrieval(question_embed, question)
             path1_time = time.time() - path_start
             # 记录查询编码和路径1检索的时间日志
-            logger.info(f"Query encoding: {query_time:.3f}s, Path1 retrieval: {path1_time:.3f}s")
+            logger.info(f"查询编码耗时: {query_time:.3f}秒, 路径1检索耗时: {path1_time:.3f}秒")
 
             # 从路径1结果中提取节点相关的文本块ID
             path1_chunk_ids = self._extract_chunk_ids_from_nodes(path1_results['top_nodes'])
@@ -744,7 +744,7 @@ class KTRetriever:
             logger.info("开始使用基于类型的过滤路径")
             type_filtered_results = self._type_based_retrieval(question_embed, question, involved_types)
             type_filtering_time = time.time() - type_start
-            logger.info(f"Query encoding: {query_time:.3f}s, Type-based retrieval: {type_filtering_time:.3f}s")
+            logger.info(f"查询编码耗时: {query_time:.3f}秒, 基于类型的检索耗时: {type_filtering_time:.3f}秒")
 
             return question_embed, type_filtered_results
         else:
@@ -2086,7 +2086,7 @@ class KTRetriever:
             question_embed, results = self.retrieve(question)
 
         retrieval_time = time.time() - start_time
-        logger.info(f"retrieval time: {retrieval_time:.4f}")
+        logger.info(f"检索耗时: {retrieval_time:.4f}秒")
 
         # path1_triples = self._extract_triple_based_info(results['path1_results']['one_hop_triples'])
 
@@ -2411,7 +2411,7 @@ class KTRetriever:
         # 调用LLM客户端的API方法生成答案
         # self.llm_client是在__init__方法中初始化的call_llm_api.LLMCompletionCall实例
         answer = self.llm_client.call_api(prompt)
-        logger.info("Retrieved context:")
+        logger.info("检索到的上下文:")
         logger.info(prompt)
         logger.info(f"Answer: {answer}")
         # 返回LLM生成的答案
@@ -2746,7 +2746,7 @@ class KTRetriever:
             encode_start = time.time()
             triple_embeddings = self.qa_encoder.encode(triple_texts, convert_to_tensor=True).to(self.device)
             encode_elapsed = time.time() - encode_start
-            logger.info(f"[StepTiming] step=batch_encode_triple_texts time={encode_elapsed:.4f}")
+            logger.info(f"[StepTiming] 步骤：批量编码三元组文本 耗时={encode_elapsed:.4f}秒")
 
             # 批量计算相似度
             sim_calc_start = time.time()
@@ -2756,7 +2756,7 @@ class KTRetriever:
                 dim=1
             )
             sim_calc_elapsed = time.time() - sim_calc_start
-            logger.info(f"[StepTiming] step=batch_calculate_similarities time={sim_calc_elapsed:.4f}")
+            logger.info(f"[StepTiming] 步骤：批量计算相似度 耗时={sim_calc_elapsed:.4f}秒")
 
             # 为每个有效三元组计算最终评分
             for i, (h, r, t) in enumerate(valid_triples):
@@ -2781,7 +2781,7 @@ class KTRetriever:
         # 按评分降序排序
         scored_triples.sort(key=lambda x: x[3], reverse=True)
         elapsed = time.time() - start_time
-        logger.info(f"[StepTiming] step=_rerank_triples_by_relevance time={elapsed:.4f}")
+        logger.info(f"[StepTiming] 步骤：按评分降序排序三元组 耗时={elapsed:.4f}秒")
         return scored_triples
 
     def _rerank_triples_individual(self, triples: List[Tuple[str, str, str]], question_embed: torch.Tensor) -> List[
@@ -2964,7 +2964,7 @@ class KTRetriever:
             return
 
         start_time = time.time()
-        logger.info("Building optimized node text index for keyword search...")
+        logger.info("正在为关键词搜索构建优化的节点文本索引...")
         # 初始化节点文本索引字典
         self._node_text_index = {}
 
@@ -3008,7 +3008,7 @@ class KTRetriever:
                 continue
 
         end_time = time.time()
-        logger.info(f"Time taken to build node text index: {end_time - start_time} seconds")
+        logger.info(f"构建节点文本索引耗时: {end_time - start_time} 秒")
 
         # 尝试将构建好的节点文本索引保存到磁盘缓存
         self._save_node_text_index()
@@ -3037,7 +3037,7 @@ class KTRetriever:
 
             file_size = os.path.getsize(cache_path)
             logger.info(
-                f"Saved node text index with {len(serializable_index)} words to {cache_path} (size: {file_size} bytes)")
+                f"已保存包含 {len(serializable_index)} 个词的节点文本索引到 {cache_path} (大小: {file_size} 字节)")
             return True
 
         except Exception as e:
@@ -3073,11 +3073,11 @@ class KTRetriever:
 
                 # 检查加载的索引与当前图是否一致
                 if not self._check_text_index_consistency():
-                    logger.info("Text index inconsistent with current graph, will rebuild")
+                    logger.info("文本索引与当前图不一致，将重新构建")
                     return False
 
                 logger.info(
-                    f"Loaded node text index with {len(self._node_text_index)} words from {cache_path} (file size: {file_size} bytes)")
+                    f"从 {cache_path} 加载了包含 {len(self._node_text_index)} 个词汇的节点文本索引 (文件大小: {file_size} 字节)")
                 return True
 
             except Exception as e:
@@ -3088,7 +3088,7 @@ class KTRetriever:
                 except Exception as e2:
                     logger.error(f"Failed to remove corrupted cache file {cache_path}: {type(e2).__name__}: {e2}")
         else:
-            logger.info(f"Cache file not found: {cache_path}")
+            logger.info(f"缓存文件不存在: {cache_path}")
         return False
 
     def _check_text_index_consistency(self):
@@ -3104,7 +3104,7 @@ class KTRetriever:
             # 计算图中存在但索引中缺失的节点
             missing_nodes = current_nodes - indexed_nodes
             if missing_nodes:
-                logger.warning(f"Text index missing {len(missing_nodes)} nodes from current graph")
+                logger.warning(f"文本索引缺少图中 {len(missing_nodes)} 个节点")
                 return False
 
             # 计算索引中存在但图中不存在的节点（多余的节点）
@@ -3197,19 +3197,19 @@ class KTRetriever:
             if self.chunk_embeddings_precomputed:
                 return
 
-            logger.info("Precomputing chunk embeddings for direct chunk retrieval...")
+            logger.info("正在预计算文本块嵌入以支持直接文本块检索...")
             # 尝试从磁盘加载文本块嵌入缓存
             if self._load_chunk_embedding_cache():
-                logger.info("Successfully loaded chunk embeddings from disk cache")
+                logger.info("成功从磁盘缓存加载文本块嵌入")
                 self.chunk_embeddings_precomputed = True
                 return
 
             # 检查是否有可用的文本块
             if not self.chunk2id:
-                logger.info("Warning: No chunks available for embedding computation")
+                logger.info("警告: 没有可用于嵌入计算的文本块")
                 return
 
-            logger.info("Computing chunk embeddings from scratch...")
+            logger.info("从头开始计算文本块嵌入...")
 
             # 获取所有文本块ID和对应的文本内容
             chunk_ids = list(self.chunk2id.keys())
@@ -3260,7 +3260,7 @@ class KTRetriever:
             # 如果成功生成了嵌入向量，则构建FAISS索引
             if embeddings_list:
                 try:
-                    logger.info("Building FAISS index for chunk embeddings...")
+                    logger.info("正在为文本块嵌入构建FAISS索引...")
                     # 将嵌入向量列表转换为NumPy数组
                     embeddings_array = np.array(embeddings_list)
                     dimension = embeddings_array.shape[1]
@@ -3274,15 +3274,14 @@ class KTRetriever:
                         self.chunk_id_to_index[chunk_id] = i  # 文本块ID到索引位置的映射
                         self.index_to_chunk_id[i] = chunk_id  # 索引位置到文本块ID的映射
 
-                    logger.info(f"FAISS index built with {len(valid_chunk_ids)} chunks")
-
+                    logger.info(f"FAISS索引已构建，包含 {len(valid_chunk_ids)} 个文本块")
                 except Exception as e:
-                    logger.error(f"Error building FAISS index for chunks: {str(e)}")
+                    logger.error(f"构建文本块的FAISS索引时出错: {str(e)}")
 
             # 标记文本块嵌入预计算完成
             self.chunk_embeddings_precomputed = True
             logger.info(
-                f"Chunk embeddings precomputed for {total_processed} chunks (cache size: {len(self.chunk_embedding_cache)})")
+                f"文本块嵌入已预计算完成，共处理 {total_processed} 个文本块 (缓存大小: {len(self.chunk_embedding_cache)})")
 
             # 尝试将文本块嵌入缓存保存到磁盘
             self._save_chunk_embedding_cache()
@@ -3471,7 +3470,7 @@ class KTRetriever:
                     return False
 
                 logger.info(
-                    f"Loaded chunk embedding cache with {len(self.chunk_embedding_cache)} entries from {cache_path} (file size: {file_size} bytes)")
+                    f"从 {cache_path} 加载了包含 {len(self.chunk_embedding_cache)} 个条目的文本块嵌入缓存 (文件大小: {file_size} 字节)")
                 return True
 
             except Exception as e:
@@ -3482,7 +3481,7 @@ class KTRetriever:
                 except Exception as e:
                     logger.error(f"Error removing corrupted chunk cache file: {cache_path}: {e}")
         else:
-            logger.info(f"Chunk cache file not found: {cache_path}")
+            logger.info(f"未找到文本块缓存文件: {cache_path}")
         return False
 
     def _check_chunk_cache_consistency(self):

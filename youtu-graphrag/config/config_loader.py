@@ -15,10 +15,10 @@ from utils.logger import logger
 @dataclass
 class DatasetConfig:
     """Dataset configuration for a specific dataset"""
-    corpus_path: str
-    qa_path: str
-    schema_path: str
-    graph_output: str
+    corpus_path: Optional[str] = ""
+    qa_path: Optional[str] = ""
+    schema_path: Optional[str] = ""
+    graph_output: Optional[str] = ""
 
 @dataclass
 class TriggersConfig:
@@ -235,7 +235,8 @@ class ConfigManager:
     def get_dataset_config(self, dataset_name: str) -> DatasetConfig:
         """Get configuration for a specific dataset."""
         if dataset_name not in self.datasets:
-            raise ValueError(f"Dataset '{dataset_name}' not found in configuration")
+            logger.warning(f"找不到数据集 {dataset_name} 的配置")
+            return self.datasets['demo']
         return self.datasets[dataset_name]
     
     def get_prompt(self, category: str, prompt_type: str) -> str:

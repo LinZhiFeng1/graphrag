@@ -407,7 +407,7 @@ class FastTreeComm:
                 except Exception as e:
                     logger.error(f"Error creating super node for community {comm_id}: {e}")
         
-        logger.info(f"Created {len(super_nodes)} super nodes")
+        logger.info(f"已创建 {len(super_nodes)} 个超级节点")
         return super_nodes
 
     def extract_keywords_from_community(self, community_nodes: List[str], top_k: int = 5) -> List[str]:

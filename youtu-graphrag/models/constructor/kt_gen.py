@@ -171,7 +171,7 @@ class KTBuilder:
             for chunk_id, chunk_text in all_data.items():
                 f.write(f"id: {chunk_id}\tChunk: {chunk_text}\n")
         
-        logger.info(f"Chunk data saved to {chunk_file} ({len(all_data)} chunks)")
+        logger.info(f"文本块数据已保存到 {chunk_file} ({len(all_data)} 个文本块)")
     
     def extract_with_llm(self, prompt: str):
         """
@@ -687,7 +687,7 @@ class KTBuilder:
 
         # 记录结束时间并计算耗时
         end_comm = time.time()
-        logger.info(f"Community Indexing Time: {end_comm - start_comm}s")
+        logger.info(f"社区索引耗时: {end_comm - start_comm}s")
     
     def _connect_keywords_to_communities(self):
         """
@@ -760,8 +760,8 @@ class KTBuilder:
         # 记录开始处理时间，用于性能统计
         start_construct = time.time()
         total_docs = len(documents)
-        
-        logger.info(f"Starting processing {total_docs} documents with {max_workers} workers...")
+
+        logger.info(f"开始处理 {total_docs} 个文档，使用 {max_workers} 个工作线程...")
 
         # 初始化变量用于跟踪处理状态
         all_futures = []
@@ -790,23 +790,23 @@ class KTBuilder:
                             # 估算剩余处理时间
                             estimated_remaining_time = remaining_docs * avg_time_per_doc
                             
-                            logger.info(f"Progress: {processed_count}/{total_docs} documents processed "
+                            logger.info(f"进度: 已处理 {processed_count}/{total_docs} 个文档 "
                                   f"({processed_count/total_docs*100:.1f}%) "
-                                  f"[{failed_count} failed] "
-                                  f"ETA: {estimated_remaining_time/60:.1f} minutes")
+                                  f"[{failed_count} 个失败] "
+                                  f"预计剩余时间: {estimated_remaining_time:.1f} 秒")
                         
-                    except Exception as e:
+                    except Exception:
                         failed_count += 1
 
-        except Exception as e:
+        except Exception:
             return
 
         end_construct = time.time()
-        logger.info(f"Construction Time: {end_construct - start_construct}s")
-        logger.info(f"Successfully processed: {processed_count}/{total_docs} documents")
-        logger.info(f"Failed: {failed_count} documents")
-        
-        logger.info(f"🚀🚀🚀🚀 {'Processing Level 3 and 4':^20} 🚀🚀🚀🚀")
+        logger.info(f"构建耗时: {end_construct - start_construct}s")
+        logger.info(f"成功处理: {processed_count}/{total_docs} 个文档")
+        logger.info(f"失败: {failed_count} 个文档")
+
+        logger.info(f"🚀🚀🚀🚀 {'正在处理第3层和第4层':^20} 🚀🚀🚀🚀")
         logger.info(f"{'➖' * 20}")
 
         # 执行三元组去重操作
@@ -880,7 +880,7 @@ class KTBuilder:
        Returns:
            格式化的图输出
        """
-        logger.info(f"========{'Start Building':^20}========")
+        logger.info(f"========{'开始构建知识图谱':^20}========")
         logger.info(f"{'➖' * 30}")
 
         # 读取语料库文件，使用json_repair处理可能存在的JSON格式问题
@@ -891,7 +891,7 @@ class KTBuilder:
         self.process_all_documents(documents)
 
         # 记录处理完成日志，并输出累计使用的token数量
-        logger.info(f"All Process finished, token cost: {self.token_len}")
+        logger.info(f"所有处理完成，消耗token数: {self.token_len}")
 
         # 将文本块保存到文件中，供后续分析或调试使用
         self.save_chunks_to_file()
@@ -904,7 +904,7 @@ class KTBuilder:
         os.makedirs("output/graphs", exist_ok=True)
         with open(json_output_path, 'w', encoding='utf-8') as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
-        logger.info(f"Graph saved to {json_output_path}")
+        logger.info(f"图谱已保存到 {json_output_path}")
 
         # 返回格式化的图谱数据
         return output

@@ -159,14 +159,14 @@ async def clear_cache_files(dataset_name: str):
                 try:
                     if os.path.isfile(file_path):
                         os.remove(file_path)
-                        logger.info(f"Cleared cache file: {file_path}")
+                        logger.info(f"已清除缓存文件: {file_path}")
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)
-                        logger.info(f"Cleared cache directory: {file_path}")
+                        logger.info(f"已清除缓存目录: {file_path}")
                 except Exception as e:
-                    logger.warning(f"Failed to clear {file_path}: {e}")
+                    logger.warning(f"清除失败 {file_path}: {e}")
         
-        logger.info(f"Cache cleanup completed for dataset: {dataset_name}")
+        logger.info(f"数据集缓存清理完成: {dataset_name}")
         
     except Exception as e:
         logger.error(f"Error clearing cache files for {dataset_name}: {e}")
@@ -378,9 +378,7 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
         await send_progress_update(client_id, "construction", 5, "初始化图构建器...")
         
         # 获取数据集路径
-        corpus_path = f"data/uploaded/{dataset_name}/corpus.json" 
-        # 始终使用demo.json模式以保证一致性
-        schema_path = "schemas/demo.json"
+        corpus_path = f"data/uploaded/{dataset_name}/corpus.json"
 
         # 如果上传数据集不存在，尝试使用demo数据集
         if not os.path.exists(corpus_path):
@@ -397,6 +395,10 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
         global config
         if config is None:
             config = get_config("config/base_config.yaml")
+
+        # 根据配置动态选择schema，未指定则使用默认的demo.json
+        schema_path = config.get_dataset_config(dataset_name).schema_path if config else "schemas/demo.json"
+        logger.info(f"使用的模式文件: {schema_path}")
 
         # 初始化KTBuilder图构建器
         builder = constructor.KTBuilder(
@@ -659,7 +661,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
 
         # 确定图谱文件路径
         graph_path = f"output/graphs/{dataset_name}_new.json"
-        schema_path = "schemas/demo.json"
+
         if not os.path.exists(graph_path):
             graph_path = "output/graphs/demo_new.json"
         if not os.path.exists(graph_path):
@@ -669,6 +671,10 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         global config
         if config is None:
             config = get_config("config/base_config.yaml")
+
+        # 根据配置动态选择schema，未指定则使用默认的demo.json
+        schema_path = config.get_dataset_config(dataset_name).schema_path if config else "schemas/demo.json"
+        logger.info(f"使用的模式文件: {schema_path}")
 
         # 初始化问题分解器和检索器
         graphq = decomposer.GraphQ(dataset_name, config=config)
@@ -730,6 +736,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             logger.info(f"检索完成")
             # 收集检索到的三元组和文本块
             triples = retrieval_results.get('triples', []) or []
+            # logger.info(f"检索到三元组：{triples}")
             chunk_ids = retrieval_results.get('chunk_ids', []) or []
             chunk_contents = retrieval_results.get('chunk_contents', []) or []
             if isinstance(chunk_contents, dict):
@@ -740,6 +747,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
                     if i_c < len(chunk_contents):
                         all_chunk_contents[cid] = chunk_contents[i_c]
             all_triples.update(triples)
+            # logger.info(f"全部三元组：{all_triples}")
             all_chunk_ids.update(chunk_ids)
             reasoning_steps.append({
                 "type": "sub_question",
@@ -760,6 +768,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         thoughts = []
 
         # Initial answer attempt
+        #todo:感觉排序有问题
         initial_triples = _dedup(list(all_triples))
         initial_chunk_ids = list(set(all_chunk_ids))
         initial_chunk_contents = _merge_chunk_contents(initial_chunk_ids, all_chunk_contents)
@@ -1031,10 +1040,10 @@ async def delete_dataset(dataset_name: str):
             deleted_files.append(graph_path)
         
         # 删除数据集特定的模式文件（如果存在）
-        schema_path = f"schemas/{dataset_name}.json"
-        if os.path.exists(schema_path):
-            os.remove(schema_path)
-            deleted_files.append(schema_path)
+        # schema_path = f"schemas/{dataset_name}.json"
+        # if os.path.exists(schema_path):
+        #     os.remove(schema_path)
+        #     deleted_files.append(schema_path)
         
         # 删除FAISS检索缓存目录
         cache_dir = f"retriever/faiss_cache_new/{dataset_name}"
@@ -1098,9 +1107,10 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
         global config
         if config is None:
             config = get_config("config/base_config.yaml")
-        
-        # 始终使用demo.json模式以保证一致性
-        schema_path = "schemas/demo.json"
+
+        # 根据配置动态选择schema，未指定则使用默认的demo.json
+        schema_path = config.get_dataset_config(dataset_name).schema_path if config else "schemas/demo.json"
+        logger.info(f"使用的模式文件: {schema_path}")
         
         # 初始化KTBuilder图构建器
         builder = constructor.KTBuilder(

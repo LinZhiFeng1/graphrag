@@ -164,11 +164,11 @@ class DualFAISSRetriever:
                 self.comm_index = faiss.index_cpu_to_gpu(self.gpu_resources, 0, self.comm_index)
                 logger.info("Community index moved to GPU")
             except Exception as e:
-                logger.warning(f"Warning: Failed to move community index to GPU: {e}")
+                logger.warning(f"警告：移动社区索引到GPU失败：{e}")
 
         # 标记索引已加载完成
         self.index_loaded = True
-        logger.info("FAISS indices preloaded successfully")
+        logger.info("FAISS 索引预加载完成")
 
     def _cached_faiss_search(self, index, query_embed, top_k: int, cache_key: str):
         """
@@ -233,8 +233,8 @@ class DualFAISSRetriever:
         triple_nodes = [node for node in triple_nodes if node in self.graph.nodes]
                     
         end_time = time.time()
-        logger.info(f"Time taken to get triple nodes: {end_time - start_time} seconds")
-        
+        logger.info(f"获取三元组节点耗时: {end_time - start_time} 秒")
+
         start_time = time.time()
         # 路径2：通过社区进行检索，获取相关的节点
         logger.info("开始检索社区")
@@ -390,12 +390,12 @@ class DualFAISSRetriever:
         # 去除重复的三元组，保持原有顺序
         unique_triples = self._deduplicate_triples(all_triples)
         
-        logger.info(f"Calling _calculate_triple_relevance_scores with {len(unique_triples)} unique triples")
+        logger.info(f"正在调用计算三元组与查询的相关性得分方法处理 {len(unique_triples)} 个唯一三元组")
         # 计算三元组与查询的相关性得分，过滤低相关性的三元组
         logger.info(f"计算三元组与查询的相关性得分，过滤低相关性的三元组")
         scored_triples = self._calculate_triple_relevance_scores(query_embed, unique_triples, threshold=0.1, top_k=top_k)
 
-        logger.info(f"_calculate_triple_relevance_scores returned {len(scored_triples)} scored triples")
+        logger.info(f"计算三元组查询与相关性得分 返回了 {len(scored_triples)} 个带评分的三元组")
         # 返回最终的带分数三元组列表
         return scored_triples
 

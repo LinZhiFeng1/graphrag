@@ -43,6 +43,8 @@ datasets:
     qa_path: data/demo/demo.json
     schema_path: schemas/demo.json
     graph_output: output/graphs/demo_new.json
+  demo1:
+    schema_path: schemas/demo1.json
   anony_chs:
     corpus_path: data/anony_chs/final_chunk_corpus.json
     qa_path: data/anony_chs/final_qa_pairs.json
