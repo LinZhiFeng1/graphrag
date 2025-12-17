@@ -118,6 +118,10 @@ class QuestionResponse(BaseModel):
     visualization_data: Dict
 
 
+class GraphConstructionIncrementalRequest(BaseModel):
+    dataset_name: str
+
+
 async def send_progress_update(client_id: str, stage: str, progress: int, message: str):
     """通过WebSocket向客户端发送进度更新"""
     await manager.send_message({
@@ -477,6 +481,99 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
             graph_data=graph_vis_data
         )
 
+    except Exception as e:
+        await send_progress_update(client_id, "construction", 0, f"构建失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/construct-graph-incremental", response_model=GraphConstructionResponse)
+async def construct_graph_incremental(request: GraphConstructionIncrementalRequest, client_id: str = "default"):
+    """
+    增量构建接口：保留旧数据，使用增量 Prompt
+    """
+    try:
+        if not GRAPHRAG_AVAILABLE: raise HTTPException(status_code=503, detail="GraphRAG unavailable")
+
+        dataset_name = request.dataset_name
+
+        await send_progress_update(client_id, "construction", 5, "🚀 启动增量构建 (热加载中)...")
+        # 获取数据集路径
+        corpus_path = f"data/uploaded/{dataset_name}/corpus.json"
+
+        # 如果上传数据集不存在，尝试使用demo数据集
+        if not os.path.exists(corpus_path):
+            corpus_path = "data/demo/demo_corpus.json"
+
+        # 如果连demo数据集也不存在，则抛出404错误
+        if not os.path.exists(corpus_path):
+            raise HTTPException(status_code=404, detail="Dataset not found")
+
+        # 发送进度更新：开始加载配置和语料库，进度10%
+        await send_progress_update(client_id, "construction", 10, "加载配置和语料库...")
+
+        # 初始化全局配置
+        global config
+        if config is None:
+            config = get_config("config/base_config.yaml")
+
+        # 根据配置动态选择schema，未指定则使用默认的demo.json
+        schema_path = config.get_dataset_config(dataset_name).schema_path if config else "schemas/demo.json"
+        logger.info(f"使用的模式文件: {schema_path}")
+        # ✅ 初始化 Builder，传入 is_incremental=True
+        builder = constructor.KTBuilder(
+            dataset_name,
+            schema_path,
+            mode=config.construction.mode,
+            config=config,
+            is_incremental=True
+        )
+
+        await send_progress_update(client_id, "construction", 20, "🔍 开始增量语义抽取...")
+
+        # 执行构建
+        def build_graph_sync():
+            return builder.build_knowledge_graph(corpus_path)
+
+        # 获取事件循环，以便在执行器中运行同步函数
+        loop = asyncio.get_event_loop()
+
+        # 定义不同构建阶段的进度模拟
+        stages = [
+            (30, "抽取实体和关系中..."),
+            (50, "社区检测中..."),
+            (70, "构建层次结构中..."),
+            (85, "优化图结构中..."),
+        ]
+
+        # 定义进度更新的异步函数
+        async def update_progress():
+            for progress, message in stages:
+                await asyncio.sleep(3)  # 模拟工作时间
+                await send_progress_update(client_id, "construction", progress, message)
+
+        # 同时运行图谱构建和进度更新
+        progress_task = asyncio.create_task(update_progress())
+
+        try:
+            # 在执行器中运行图谱构建函数，避免阻塞主线程
+            knowledge_graph = await loop.run_in_executor(None, build_graph_sync)
+            # 构建完成后取消进度更新任务
+            progress_task.cancel()
+        except Exception as e:
+            progress_task.cancel()
+            raise e
+
+        # 发送进度更新：准备可视化数据，进度95%
+        await send_progress_update(client_id, "construction", 95, "准备可视化数据...")
+
+        # 加载构建好的图谱用于可视化
+        graph_path = f"output/graphs/{dataset_name}_new.json"
+        graph_vis_data = await prepare_graph_visualization(graph_path)
+
+        # 发送进度更新：图构建完成，进度100%
+        await send_progress_update(client_id, "construction", 100, "图构建完成!")
+
+        return GraphConstructionResponse(success=True, message="Incremental update finished", graph_data=graph_vis_data)
     except Exception as e:
         await send_progress_update(client_id, "construction", 0, f"构建失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
