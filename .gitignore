@@ -7,3 +7,4 @@ en_core_web_*.whl
 .vscode
 *.pt
 *.pkl
+youtu-graphrag/retriever/faiss_cache_new/
