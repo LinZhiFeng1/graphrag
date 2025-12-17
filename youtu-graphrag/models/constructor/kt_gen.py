@@ -18,9 +18,11 @@ class KTBuilder:
     """
    知识图谱构建器主类，负责从文本文档中提取信息并构建成多层知识图谱
    """
-    def __init__(self, dataset_name, schema_path=None, mode=None, config=None):
+
+    def __init__(self, dataset_name, schema_path=None, mode=None, config=None, is_incremental=False):
         """
         初始化KTBuilder实例，
+        新增 is_incremental 参数控制是否热加载旧图谱
 
         Args:
             dataset_name: 数据集名称
