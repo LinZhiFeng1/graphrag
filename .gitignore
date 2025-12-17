@@ -1,3 +1,9 @@
 *.whl
 en_core_web_*.whl
 .idea
+.venv
+.env
+.DS_Store
+.vscode
+*.pt
+*.pkl
