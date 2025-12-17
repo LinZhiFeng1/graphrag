@@ -8,3 +8,4 @@ en_core_web_*.whl
 *.pt
 *.pkl
 youtu-graphrag/retriever/faiss_cache_new/
+youtu-graphrag/bin
