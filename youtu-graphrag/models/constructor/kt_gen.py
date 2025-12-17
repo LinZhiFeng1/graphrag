@@ -183,6 +183,8 @@ class KTBuilder:
        Returns:
            LLM返回的JSON格式响应
        """
+        logger.info("🚀 Calling LLM API 🚀")
+        logger.info(f"prompt:{prompt}")
         # 调用LLM客户端的API接口，传入提示词获取响应
         response = self.llm_client.call_api(prompt)
         # 使用json_repair库修复并解析LLM返回的JSON响应
@@ -224,15 +226,13 @@ class KTBuilder:
         # 获取推荐的模式定义并转换为JSON字符串
         recommend_schema = json.dumps(self.schema, ensure_ascii=False)
 
-        # 定义数据集名称到提示词类型的映射关系
-        prompt_type_map = {
-            "novel": "novel_chs",       # 中文小说数据集使用中文小说提示词
-            "novel_eng": "novel_eng"     # 英文小说数据集使用英文小说提示词
-        }
-
-        # 根据当前数据集名称获取对应的提示词类型
-        # 如果未找到匹配项，则使用默认的"general"通用提示词类型
-        prompt_type = prompt_type_map.get(self.dataset_name, "general")
+        # 优先从配置中获取提示词类型
+        # 如果配置中没有为该数据集指定 prompt_type，则使用默认的 "general"
+        prompt_type = "general"  # 默认提示词类型
+        if self.config and hasattr(self.config, 'get_dataset_config'):
+            dataset_config = self.config.get_dataset_config(self.dataset_name)
+            # 尝试从数据集配置中获取 prompt_type
+            prompt_type = getattr(dataset_config, 'prompt_type', prompt_type)
 
         # 调用配置管理器获取格式化后的提示词
         # 参数说明：
