@@ -14,6 +14,7 @@ from config import get_config
 from utils import call_llm_api, graph_processor, tree_comm
 from utils.logger import logger
 
+
 class KTBuilder:
     """
    知识图谱构建器主类，负责从文本文档中提取信息并构建成多层知识图谱
@@ -33,7 +34,7 @@ class KTBuilder:
         # 加载配置
         if config is None:
             config = get_config()
-        
+
         self.config = config
         self.dataset_name = dataset_name
         # 加载模式定义
@@ -70,7 +71,6 @@ class KTBuilder:
         except FileNotFoundError:
             return dict()
 
-
     def chunk_text(self, text) -> Tuple[List[str], Dict[str, str]]:
         """
             将文本分割成块，为每个文本块生成唯一的标识符。
@@ -81,8 +81,8 @@ class KTBuilder:
                 (chunks列表, chunk_id到chunk文本的映射)
             """
         if self.dataset_name in self.datasets_no_chunk:
-            chunks = [f"{text.get('title', '')} {text.get('text', '')}".strip() 
-                     if isinstance(text, dict) else str(text)]
+            chunks = [f"{text.get('title', '')} {text.get('text', '')}".strip()
+                      if isinstance(text, dict) else str(text)]
         else:
             chunks = [str(text)]
 
@@ -113,7 +113,7 @@ class KTBuilder:
         # 如果输入文本为空（None、空字符串等），直接返回占位符 [EMPTY_TEXT]
         if not text:
             return "[EMPTY_TEXT]"
-        
+
         if self.dataset_name == "graphrag-bench":
             # 安全字符集合
             safe_chars = {
@@ -121,28 +121,28 @@ class KTBuilder:
             }
             # 保留字母数字，空白，安全字符
             cleaned = "".join(
-                char for char in text 
+                char for char in text
                 if char.isalnum() or char.isspace() or char in safe_chars
             ).strip()
         else:
             # 更严格的安全字符
             safe_chars = {
-                *" .:,!?()-+="  
+                *" .:,!?()-+="
             }
             cleaned = "".join(
-                char for char in text 
+                char for char in text
                 if char.isalnum() or char.isspace() or char in safe_chars
             ).strip()
-        
+
         return cleaned if cleaned else "[EMPTY_AFTER_CLEANING]"
-    
+
     def save_chunks_to_file(self):
         """
         将文本块保存到文件中，支持增量更新已有文件
         """
         os.makedirs("output/chunks", exist_ok=True)
         chunk_file = f"output/chunks/{self.dataset_name}.txt"
-        
+
         existing_data = {}
         # 如果文件已存在，尝试读取其中的内容
         if os.path.exists(chunk_file):
@@ -172,9 +172,9 @@ class KTBuilder:
         with open(chunk_file, "w", encoding="utf-8") as f:
             for chunk_id, chunk_text in all_data.items():
                 f.write(f"id: {chunk_id}\tChunk: {chunk_text}\n")
-        
+
         logger.info(f"文本块数据已保存到 {chunk_file} ({len(all_data)} 个文本块)")
-    
+
     def extract_with_llm(self, prompt: str):
         """
        调用LLM API提取信息
@@ -195,7 +195,7 @@ class KTBuilder:
         # 将解析后的字典对象重新序列化为格式化的JSON字符串
         # ensure_ascii=False确保中文等非ASCII字符正常显示
         parsed_json = json.dumps(parsed_dict, ensure_ascii=False)
-        return parsed_json 
+        return parsed_json
 
     def token_cal(self, text: str):
         """
@@ -213,7 +213,7 @@ class KTBuilder:
 
         # 将文本编码为token序列，并返回序列长度
         return len(encoding.encode(text))
-    
+
     def _get_construction_prompt(self, chunk: str) -> str:
         """
             根据数据集名称生成相应的构建提示词
@@ -243,7 +243,7 @@ class KTBuilder:
         # - schema: 模式定义JSON字符串
         # - chunk: 当前处理的文本块内容
         return self.config.get_prompt_formatted("construction", prompt_type, schema=recommend_schema, chunk=chunk)
-    
+
     def _validate_and_parse_llm_response(self, prompt: str, llm_response: str) -> dict:
         """
            验证并解析LLM响应
@@ -257,7 +257,7 @@ class KTBuilder:
            """
         if llm_response is None:
             return None
-            
+
         try:
             # 累计计算提示词和响应的token总长度
             self.token_len += self.token_cal(prompt + llm_response)
@@ -266,8 +266,9 @@ class KTBuilder:
         except Exception as e:
             llm_response_str = str(llm_response) if llm_response is not None else "None"
             return None
-    
-    def _find_or_create_entity(self, entity_name: str, chunk_id: int, nodes_to_add: list, entity_type: str = None) -> str:
+
+    def _find_or_create_entity(self, entity_name: str, chunk_id: int, nodes_to_add: list,
+                               entity_type: str = None) -> str:
         """
             查找现有实体或创建新实体（批处理模式）
 
@@ -286,7 +287,7 @@ class KTBuilder:
                 (
                     n
                     for n, d in self.graph.nodes(data=True)
-                    if d.get("label") == "entity" and d["properties"]["name"] == entity_name # 筛选条件：标签为"entity"且名称匹配
+                    if d.get("label") == "entity" and d["properties"]["name"] == entity_name  # 筛选条件：标签为"entity"且名称匹配
                 ),
                 None,
             )
@@ -298,19 +299,19 @@ class KTBuilder:
                 properties = {"name": entity_name, "chunk id": chunk_id}
                 if entity_type:
                     properties["schema_type"] = entity_type
-                
+
                 nodes_to_add.append((
                     entity_node_id,
                     {
-                        "label": "entity", 
-                        "properties": properties, 
+                        "label": "entity",
+                        "properties": properties,
                         "level": 2
                     }
                 ))
                 self.node_counter += 1
-                
+
         return entity_node_id
-    
+
     def _validate_triple_format(self, triple: list) -> tuple:
         """
            验证并规范化三元组格式
@@ -326,11 +327,11 @@ class KTBuilder:
                 triple = triple[:3]
             elif len(triple) < 3:
                 return None
-            
+
             return tuple(triple)
         except Exception as e:
             return None
-    
+
     def _process_attributes(self, extracted_attr: dict, chunk_id: int, entity_types: dict = None) -> tuple[list, list]:
         """
         处理提取的属性信息
@@ -358,9 +359,9 @@ class KTBuilder:
                 nodes_to_add.append((
                     attr_node_id,
                     {
-                        "label": "attribute",                               # 节点标签为"attribute"
-                        "properties": {"name": attr, "chunk id": chunk_id}, # 节点属性包含属性名和来源文本块ID
-                        "level": 1,                                          # 节点层级为第1层（属性层）
+                        "label": "attribute",  # 节点标签为"attribute"
+                        "properties": {"name": attr, "chunk id": chunk_id},  # 节点属性包含属性名和来源文本块ID
+                        "level": 1,  # 节点层级为第1层（属性层）
                     }
                 ))
                 self.node_counter += 1
@@ -372,9 +373,9 @@ class KTBuilder:
                 # 将实体节点与属性节点之间的关系边添加到待添加列表
                 # 关系类型为"has_attribute"，表示实体拥有该属性
                 edges_to_add.append((entity_node_id, attr_node_id, "has_attribute"))
-        
+
         return nodes_to_add, edges_to_add
-    
+
     def _process_triples(self, extracted_triples: list, chunk_id: int, entity_types: dict = None) -> tuple[list, list]:
         """
             处理提取的三元组信息
@@ -413,7 +414,7 @@ class KTBuilder:
             # 将主语节点与宾语节点之间的关系边添加到待添加列表
             # 关系类型为三元组中的谓词(predicate)
             edges_to_add.append((subj_node_id, obj_node_id, pred))
-        
+
         return nodes_to_add, edges_to_add
 
     def process_level1_level2(self, chunk: str, id: int):
@@ -435,10 +436,10 @@ class KTBuilder:
             return
 
         # 从解析后的响应中提取属性、三元组和实体类型信息
-        extracted_attr = parsed_response.get("attributes", {}) # 属性信息字典
-        extracted_triples = parsed_response.get("triples", []) # 三元组列表
-        entity_types = parsed_response.get("entity_types", {}) # 实体类型映射
-        
+        extracted_attr = parsed_response.get("attributes", {})  # 属性信息字典
+        extracted_triples = parsed_response.get("triples", [])  # 三元组列表
+        entity_types = parsed_response.get("entity_types", {})  # 实体类型映射
+
         # 处理属性信息，生成属性节点和"has_attribute"边
         attr_nodes, attr_edges = self._process_attributes(extracted_attr, id, entity_types)
         # 处理三元组信息，生成实体节点间的关系边
@@ -447,11 +448,11 @@ class KTBuilder:
         # 合并所有待添加的节点和边
         all_nodes = attr_nodes + triple_nodes
         all_edges = attr_edges + triple_edges
-        
+
         with self.lock:
             for node_id, node_data in all_nodes:
                 self.graph.add_node(node_id, **node_data)
-            
+
             for u, v, relation in all_edges:
                 self.graph.add_edge(u, v, relation=relation)
 
@@ -483,17 +484,17 @@ class KTBuilder:
             properties = {"name": entity_name, "chunk id": chunk_id}
             if entity_type:
                 properties["schema_type"] = entity_type
-                
+
             self.graph.add_node(
-                entity_node_id, 
-                label="entity", 
-                properties=properties, 
+                entity_node_id,
+                label="entity",
+                properties=properties,
                 level=2
             )
             self.node_counter += 1
-            
+
         return entity_node_id
-    
+
     def _process_attributes_agent(self, extracted_attr: dict, chunk_id: int, entity_types: dict = None):
         """
            处理属性信息（agent模式，直接操作图）
@@ -524,7 +525,7 @@ class KTBuilder:
                 entity_type = entity_types.get(entity) if entity_types else None
                 entity_node_id = self._find_or_create_entity_direct(entity, chunk_id, entity_type)
                 self.graph.add_edge(entity_node_id, attr_node_id, relation="has_attribute")
-    
+
     def _process_triples_agent(self, extracted_triples: list, chunk_id: int, entity_types: dict = None):
         """
        处理三元组信息（agent模式，直接操作图）
@@ -584,7 +585,7 @@ class KTBuilder:
         extracted_attr = parsed_response.get("attributes", {})
         extracted_triples = parsed_response.get("triples", [])
         entity_types = parsed_response.get("entity_types", {})
-        
+
         with self.lock:
             # 处理属性信息（agent模式，直接操作图）
             self._process_attributes_agent(extracted_attr, id, entity_types)
@@ -602,7 +603,7 @@ class KTBuilder:
             # 定义数据集名称到模式文件路径的映射关系
             schema_paths = {
                 "hotpot": "schemas/hotpot.json",
-                "2wiki": "schemas/2wiki.json", 
+                "2wiki": "schemas/2wiki.json",
                 "musique": "schemas/musique.json",
                 "novel": "schemas/novels_chs.json",
                 "graphrag-bench": "schemas/graphrag-bench.json"
@@ -616,7 +617,7 @@ class KTBuilder:
             # 读取当前的模式文件内容
             with open(schema_path, 'r', encoding='utf-8') as f:
                 current_schema = json.load(f)
-            
+
             updated = False
 
             # 处理新发现的节点类型
@@ -645,15 +646,15 @@ class KTBuilder:
                         # 如果不存在，则添加到属性类型列表中
                         current_schema.setdefault("Attributes", []).append(new_attribute)
                         updated = True
-            
+
             # 如果有更新发生，则保存更新后的模式到文件
             if updated:
                 with open(schema_path, 'w', encoding='utf-8') as f:
                     json.dump(current_schema, f, ensure_ascii=False, indent=2)
-                
+
                 # Update the in-memory schema
                 self.schema = current_schema
-                
+
         except Exception as e:
             logger.error(f"Failed to update schema for dataset '{self.dataset_name}': {type(e).__name__}: {e}")
 
@@ -690,7 +691,7 @@ class KTBuilder:
         # 记录结束时间并计算耗时
         end_comm = time.time()
         logger.info(f"社区索引耗时: {end_comm - start_comm}s")
-    
+
     def _connect_keywords_to_communities(self):
         """
             将关键词连接到社区（可选功能）
@@ -722,9 +723,10 @@ class KTBuilder:
 
             # 将文档切分为多个文本块，并建立块ID到块内容的映射
             chunks, chunk2id = self.chunk_text(doc)
-            
+
             if not chunks or not chunk2id:
-                raise ValueError(f"No valid chunks generated from document. Chunks: {len(chunks)}, Chunk2ID: {len(chunk2id)}")
+                raise ValueError(
+                    f"No valid chunks generated from document. Chunks: {len(chunks)}, Chunk2ID: {len(chunk2id)}")
 
             # 遍历所有文本块进行处理
             for chunk in chunks:
@@ -743,7 +745,7 @@ class KTBuilder:
                 else:
                     # 标准模式：基础的知识图谱构建方式
                     self.process_level1_level2(chunk, id)
-                
+
         except Exception as e:
             error_msg = f"Error processing document: {type(e).__name__}: {str(e)}"
             raise Exception(error_msg) from e
@@ -769,7 +771,7 @@ class KTBuilder:
         all_futures = []
         processed_count = 0
         failed_count = 0
-        
+
         try:
             # 创建线程池执行器，使用计算得出的最大工作线程数
             with futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -791,12 +793,12 @@ class KTBuilder:
                             remaining_docs = total_docs - processed_count
                             # 估算剩余处理时间
                             estimated_remaining_time = remaining_docs * avg_time_per_doc
-                            
+
                             logger.info(f"进度: 已处理 {processed_count}/{total_docs} 个文档 "
-                                  f"({processed_count/total_docs*100:.1f}%) "
-                                  f"[{failed_count} 个失败] "
-                                  f"预计剩余时间: {estimated_remaining_time:.1f} 秒")
-                        
+                                        f"({processed_count / total_docs * 100:.1f}%) "
+                                        f"[{failed_count} 个失败] "
+                                        f"预计剩余时间: {estimated_remaining_time:.1f} 秒")
+
                     except Exception:
                         failed_count += 1
 
@@ -815,8 +817,6 @@ class KTBuilder:
         self.triple_deduplicate()
         # 处理第4层社区检测
         self.process_level4()
-
-       
 
     def triple_deduplicate(self):
         """
@@ -862,7 +862,7 @@ class KTBuilder:
             output.append(relationship)
 
         return output
-    
+
     def save_graphml(self, output_path: str):
         """
            保存图为GraphML格式
@@ -871,7 +871,7 @@ class KTBuilder:
                output_path: 输出路径
            """
         graph_processor.save_graph(self.graph, output_path)
-    
+
     def build_knowledge_graph(self, corpus):
         """
        构建知识图谱的主入口点
