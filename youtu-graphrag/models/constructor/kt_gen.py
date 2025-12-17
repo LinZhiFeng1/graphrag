@@ -10,6 +10,9 @@ import networkx as nx
 import tiktoken
 import json_repair
 
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
 from config import get_config
 from utils import call_llm_api, graph_processor, tree_comm
 from utils.logger import logger
@@ -39,9 +42,21 @@ class KTBuilder:
         self.dataset_name = dataset_name
         # 加载模式定义
         self.schema = self.load_schema(schema_path or config.get_dataset_config(dataset_name).schema_path)
+        self.is_incremental = is_incremental
+
         # 初始化NetworkX图结构
         self.graph = nx.MultiDiGraph()
         self.node_counter = 0
+
+        logger.info("正在初始化语义模型 (BGE-M3)...")
+        self.embedder = SentenceTransformer(config.embeddings.model_name)
+        self.node_embeddings_cache = {"ids": [], "vecs": None}
+
+        if self.is_incremental:
+            self._hot_load_existing_graph()
+        else:
+            logger.info("🆕 [标准模式] 初始化空图谱...")
+
         # 不需要分块的数据集列表
         self.datasets_no_chunk = config.construction.datasets_no_chunk
         self.token_len = 0
@@ -53,6 +68,118 @@ class KTBuilder:
         self.all_chunks = {}
         # 设置处理模式
         self.mode = mode or config.construction.mode
+
+    def _hot_load_existing_graph(self):
+        """
+        【新增】读取 output/graphs/xxx_new.json (List格式) 并加载到 self.graph
+        """
+        old_graph_path = os.path.join(self.config.output.graphs_dir, f"{self.dataset_name}_new.json")
+
+        if os.path.exists(old_graph_path):
+            logger.info(f"🔄 [增量模式] 正在加载旧图谱: {old_graph_path}")
+            try:
+                with open(old_graph_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)  # 这里 data 是一个 List
+
+                if not isinstance(data, list):
+                    logger.error("⚠️ 旧图谱格式异常（非List），跳过加载")
+                    return
+
+                count = 0
+                for item in data:
+                    # 严格按照 demo_new.json 结构解析
+                    s_node = item.get("start_node")
+                    e_node = item.get("end_node")
+                    relation = item.get("relation")
+
+                    if s_node and e_node:
+                        # 提取节点名称作为 ID
+                        s_name = s_node.get("properties", {}).get("name", f"unknown_{count}")
+                        e_name = e_node.get("properties", {}).get("name", f"unknown_{count + 1}")
+
+                        # 添加节点和属性
+                        self.graph.add_node(s_name, **s_node)
+                        self.graph.add_node(e_name, **e_node)
+
+                        # 添加边
+                        self.graph.add_edge(s_name, e_name, relation=relation)
+                        count += 1
+
+                # 恢复计数器 (简单策略：基于当前节点数，避免新生成的 IDentity_0 冲突)
+                # 虽然加载的节点用的是 Name 作 ID，但新节点会用 entity_X
+                # todo gemini为什么要加1000
+                self.node_counter = self.graph.number_of_nodes() + 1000
+
+                logger.info(f"✅ 热加载完成，恢复节点数: {self.graph.number_of_nodes()}，边数: {count}")
+
+                # 立即构建语义索引
+                self._precompute_graph_embeddings()
+
+            except Exception as e:
+                logger.error(f"❌ 热加载失败: {e}，将回退到空图谱")
+        else:
+            logger.warning(f"⚠️ 未找到旧图谱文件 {old_graph_path}，将开始全新构建")
+
+    def _precompute_graph_embeddings(self):
+        """【新增】为图谱中的 Entity 节点计算向量"""
+        if self.graph.number_of_nodes() == 0: return
+
+        nodes_text = []
+        nodes_id = []
+
+        for n, d in self.graph.nodes(data=True):
+            # 过滤：只对 'entity' 类型的节点做索引，忽略 'attribute' 节点
+            if d.get('label') == 'entity':
+                # 获取名称，优先用 properties.name，没有则用 ID
+                name = d.get('properties', {}).get('name', str(n))
+                if name:
+                    nodes_text.append(name)
+                    nodes_id.append(n)
+
+        if nodes_text:
+            logger.info(f"🔍 [图驱动] 正在为 {len(nodes_text)} 个历史实体生成索引...")
+            embeddings = self.embedder.encode(nodes_text, normalize_embeddings=True)
+            self.node_embeddings_cache = {"ids": nodes_id, "vecs": embeddings}
+
+    def _get_relevant_subgraph_context(self, chunk_text: str, top_k=3) -> str:
+        """【新增】检索与 chunk 相关的旧知识"""
+        if self.node_embeddings_cache["vecs"] is None:
+            return "暂无历史记录。"
+
+        # 1. 编码 Chunk (取前512字符)
+        chunk_vec = self.embedder.encode([chunk_text[:512]], normalize_embeddings=True)
+
+        # 2. 向量相似度
+        # todo gemini为什么用np，别的里面用的好像不是np
+        similarities = np.dot(self.node_embeddings_cache["vecs"], chunk_vec.T).flatten()
+        top_indices = np.argsort(similarities)[-top_k:][::-1]
+
+        context_lines = []
+        seen = set()
+
+        with self.lock:
+            for idx in top_indices:
+                node_id = self.node_embeddings_cache["ids"][idx]
+
+                # 获取 1-hop 邻居
+                edges = list(self.graph.out_edges(node_id, data=True)) + \
+                        list(self.graph.in_edges(node_id, data=True))
+
+                for u, v, d in edges:
+                    # 简单的边去重
+                    edge_key = tuple(sorted((u, v)))
+                    if edge_key in seen: continue
+                    seen.add(edge_key)
+
+                    u_name = self.graph.nodes[u].get('properties', {}).get('name', u)
+                    v_name = self.graph.nodes[v].get('properties', {}).get('name', v)
+                    rel = d.get('relation', 'related')
+                    context_lines.append(f"[{u_name}, {rel}, {v_name}]")
+
+        if not context_lines: return "暂无历史记录。"
+        # 返回前 15 条，避免 Prompt 溢出
+        # todo gemini 没有15条排序么
+        return "\n".join(context_lines[:15])
 
     def load_schema(self, schema_path) -> Dict[str, Any]:
         """
@@ -242,7 +369,35 @@ class KTBuilder:
         # - prompt_type: 具体的提示词类型
         # - schema: 模式定义JSON字符串
         # - chunk: 当前处理的文本块内容
-        return self.config.get_prompt_formatted("construction", prompt_type, schema=recommend_schema, chunk=chunk)
+        return self.config.get_prompt_formatted(
+            "construction",
+            prompt_type,
+            schema=recommend_schema,
+            chunk=chunk)
+
+    # 【新增】增量 Prompt 获取方法
+    def _get_incremental_construction_prompt(self, chunk: str) -> str:
+        recommend_schema = json.dumps(self.schema, ensure_ascii=False)
+
+        # 1. 获取图驱动上下文
+        examples_context = self._get_relevant_subgraph_context(chunk)
+
+        # 2. 映射到增量 Prompt 模板 (例如 general -> general_incremental)
+        prompt_type_map = {
+            "novel": "novel_chs_incremental",
+            "novel_eng": "novel_eng_incremental"
+        }
+        # 默认使用我们刚配置的 general_incremental
+        prompt_type = prompt_type_map.get(self.dataset_name, "general_incremental")
+
+        # 3. 注入 examples
+        return self.config.get_prompt_formatted(
+            "construction",
+            prompt_type,
+            schema=recommend_schema,
+            chunk=chunk,
+            examples=examples_context
+        )
 
     def _validate_and_parse_llm_response(self, prompt: str, llm_response: str) -> dict:
         """
@@ -426,7 +581,12 @@ class KTBuilder:
                id: 文本块ID
         """
         # 生成构建知识图谱的提示词
-        prompt = self._get_construction_prompt(chunk)
+        # 根据模式选择 Prompt 方法 ---
+        if self.is_incremental:
+            prompt = self._get_incremental_construction_prompt(chunk)
+        else:
+            prompt = self._get_construction_prompt(chunk)
+
         # 调用LLM API提取信息
         llm_response = self.extract_with_llm(prompt)
 
