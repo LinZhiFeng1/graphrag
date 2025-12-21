@@ -107,7 +107,6 @@ class KTBuilder:
 
                 # 恢复计数器 (简单策略：基于当前节点数，避免新生成的 IDentity_0 冲突)
                 # 虽然加载的节点用的是 Name 作 ID，但新节点会用 entity_X
-                # todo gemini为什么要加1000
                 self.node_counter = self.graph.number_of_nodes() + 1000
 
                 logger.info(f"✅ 热加载完成，恢复节点数: {self.graph.number_of_nodes()}，边数: {count}")
@@ -150,7 +149,6 @@ class KTBuilder:
         chunk_vec = self.embedder.encode([chunk_text[:512]], normalize_embeddings=True)
 
         # 2. 向量相似度
-        # todo gemini为什么用np，别的里面用的好像不是np
         similarities = np.dot(self.node_embeddings_cache["vecs"], chunk_vec.T).flatten()
         top_indices = np.argsort(similarities)[-top_k:][::-1]
 
@@ -357,7 +355,7 @@ class KTBuilder:
 
         # 优先从配置中获取提示词类型
         # 如果配置中没有为该数据集指定 prompt_type，则使用默认的 "general"
-        prompt_type = "general"  # 默认提示词类型
+        prompt_type = "general"
         if self.config and hasattr(self.config, 'get_dataset_config'):
             dataset_config = self.config.get_dataset_config(self.dataset_name)
             # 尝试从数据集配置中获取 prompt_type
@@ -383,12 +381,11 @@ class KTBuilder:
         examples_context = self._get_relevant_subgraph_context(chunk)
 
         # 2. 映射到增量 Prompt 模板 (例如 general -> general_incremental)
-        prompt_type_map = {
-            "novel": "novel_chs_incremental",
-            "novel_eng": "novel_eng_incremental"
-        }
-        # 默认使用我们刚配置的 general_incremental
-        prompt_type = prompt_type_map.get(self.dataset_name, "general_incremental")
+        prompt_type = "general_incremental"
+        if self.config and hasattr(self.config, 'get_dataset_config'):
+            dataset_config = self.config.get_dataset_config(self.dataset_name)
+            # 尝试从数据集配置中获取 prompt_type
+            prompt_type = getattr(dataset_config, 'prompt_type', prompt_type)+"_incremental"
 
         # 3. 注入 examples
         return self.config.get_prompt_formatted(

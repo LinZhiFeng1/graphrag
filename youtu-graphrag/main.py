@@ -75,6 +75,8 @@ def parse_arguments():
         type=str,
         help="JSON string with configuration overrides"
     )
+    parser.add_argument("--incremental", action="store_true",
+                        help="Use incremental construction mode (no cache clear, use context)")
     return parser.parse_args()
 
 
@@ -129,9 +131,10 @@ def clear_cache_files(dataset_name: str) -> None:
         logger.error(f"Error clearing cache files for {dataset_name}: {e}")
 
 
-def graph_construction(datasets):
+def graph_construction(datasets, is_incremental=False):
     if config.triggers.constructor_trigger:
-        logger.info("Starting knowledge graph construction...")
+        logger.info(
+            f"Starting knowledge graph construction (Mode: {'Incremental' if is_incremental else 'Standard'})...")
 
         for dataset in datasets:
 
@@ -139,13 +142,20 @@ def graph_construction(datasets):
                 dataset_config = config.get_dataset_config(dataset)
                 logger.info(f"Building knowledge graph for dataset: {dataset}")
                 logger.info("Clearing caches before construction...")
-                clear_cache_files(dataset)
+
+                # ✅ 仅在非增量模式下清理缓存
+                if not is_incremental:
+                    logger.info("🧹 Clearing caches for fresh build...")
+                    clear_cache_files(dataset)
+                else:
+                    logger.info("⚡ Incremental mode: Skipping cache clear.")
 
                 builder = constructor.KTBuilder(
                     dataset,
                     dataset_config.schema_path,
                     mode=config.construction.mode,
-                    config=config
+                    config=config,
+                    is_incremental=is_incremental
                 )
 
                 builder.build_knowledge_graph(dataset_config.corpus_path)
@@ -574,7 +584,7 @@ if __name__ == "__main__":
     # ########### Construction ###########
     if config.triggers.constructor_trigger:
         logger.info("Starting knowledge graph construction...")
-        graph_construction(datasets)
+        graph_construction(datasets, is_incremental=args.incremental)
 
     # ########### Retriever ###########
     if config.triggers.retrieve_trigger:
