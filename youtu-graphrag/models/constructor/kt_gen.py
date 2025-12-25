@@ -10,17 +10,23 @@ import networkx as nx
 import tiktoken
 import json_repair
 
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
 from config import get_config
 from utils import call_llm_api, graph_processor, tree_comm
 from utils.logger import logger
+
 
 class KTBuilder:
     """
    知识图谱构建器主类，负责从文本文档中提取信息并构建成多层知识图谱
    """
-    def __init__(self, dataset_name, schema_path=None, mode=None, config=None):
+
+    def __init__(self, dataset_name, schema_path=None, mode=None, config=None, is_incremental=False):
         """
         初始化KTBuilder实例，
+        新增 is_incremental 参数控制是否热加载旧图谱
 
         Args:
             dataset_name: 数据集名称
@@ -31,14 +37,26 @@ class KTBuilder:
         # 加载配置
         if config is None:
             config = get_config()
-        
+
         self.config = config
         self.dataset_name = dataset_name
         # 加载模式定义
         self.schema = self.load_schema(schema_path or config.get_dataset_config(dataset_name).schema_path)
+        self.is_incremental = is_incremental
+
         # 初始化NetworkX图结构
         self.graph = nx.MultiDiGraph()
         self.node_counter = 0
+
+        logger.info("正在初始化语义模型 (BGE-M3)...")
+        self.embedder = SentenceTransformer(config.embeddings.model_name, device=config.embeddings.device)
+        self.node_embeddings_cache = {"ids": [], "vecs": None}
+
+        if self.is_incremental:
+            self._hot_load_existing_graph()
+        else:
+            logger.info("🆕 [标准模式] 初始化空图谱...")
+
         # 不需要分块的数据集列表
         self.datasets_no_chunk = config.construction.datasets_no_chunk
         self.token_len = 0
@@ -50,6 +68,115 @@ class KTBuilder:
         self.all_chunks = {}
         # 设置处理模式
         self.mode = mode or config.construction.mode
+
+    def _hot_load_existing_graph(self):
+        """
+        【新增】读取 output/graphs/xxx_new.json (List格式) 并加载到 self.graph
+        """
+        old_graph_path = os.path.join(self.config.output.graphs_dir, f"{self.dataset_name}_new.json")
+
+        if os.path.exists(old_graph_path):
+            logger.info(f"🔄 [增量模式] 正在加载旧图谱: {old_graph_path}")
+            try:
+                with open(old_graph_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)  # 这里 data 是一个 List
+
+                if not isinstance(data, list):
+                    logger.error("⚠️ 旧图谱格式异常（非List），跳过加载")
+                    return
+
+                count = 0
+                for item in data:
+                    # 严格按照 demo_new.json 结构解析
+                    s_node = item.get("start_node")
+                    e_node = item.get("end_node")
+                    relation = item.get("relation")
+
+                    if s_node and e_node:
+                        # 提取节点名称作为 ID
+                        s_name = s_node.get("properties", {}).get("name", f"unknown_{count}")
+                        e_name = e_node.get("properties", {}).get("name", f"unknown_{count + 1}")
+
+                        # 添加节点和属性
+                        self.graph.add_node(s_name, **s_node)
+                        self.graph.add_node(e_name, **e_node)
+
+                        # 添加边
+                        self.graph.add_edge(s_name, e_name, relation=relation)
+                        count += 1
+
+                # 恢复计数器 (简单策略：基于当前节点数，避免新生成的 IDentity_0 冲突)
+                # 虽然加载的节点用的是 Name 作 ID，但新节点会用 entity_X
+                self.node_counter = self.graph.number_of_nodes() + 1000
+
+                logger.info(f"✅ 热加载完成，恢复节点数: {self.graph.number_of_nodes()}，边数: {count}")
+
+                # 立即构建语义索引
+                self._precompute_graph_embeddings()
+
+            except Exception as e:
+                logger.error(f"❌ 热加载失败: {e}，将回退到空图谱")
+        else:
+            logger.warning(f"⚠️ 未找到旧图谱文件 {old_graph_path}，将开始全新构建")
+
+    def _precompute_graph_embeddings(self):
+        """【新增】为图谱中的 Entity 节点计算向量"""
+        if self.graph.number_of_nodes() == 0: return
+
+        nodes_text = []
+        nodes_id = []
+
+        for n, d in self.graph.nodes(data=True):
+            # 过滤：只对 'entity' 类型的节点做索引，忽略 'attribute' 节点
+            if d.get('label') == 'entity':
+                # 获取名称，优先用 properties.name，没有则用 ID
+                name = d.get('properties', {}).get('name', str(n))
+                if name:
+                    nodes_text.append(name)
+                    nodes_id.append(n)
+
+        if nodes_text:
+            logger.info(f"🔍 [图驱动] 正在为 {len(nodes_text)} 个历史实体生成索引...")
+            embeddings = self.embedder.encode(nodes_text, normalize_embeddings=True)
+            self.node_embeddings_cache = {"ids": nodes_id, "vecs": embeddings}
+
+    def _get_relevant_subgraph_context(self, chunk_text: str, top_k=3) -> str:
+        """【新增】检索与 chunk 相关的旧知识"""
+        if self.node_embeddings_cache["vecs"] is None:
+            return "暂无历史记录。"
+
+        # 1. 编码 Chunk (取前512字符)
+        chunk_vec = self.embedder.encode([chunk_text[:512]], normalize_embeddings=True)
+
+        # 2. 向量相似度
+        similarities = np.dot(self.node_embeddings_cache["vecs"], chunk_vec.T).flatten()
+        top_indices = np.argsort(similarities)[-top_k:][::-1]
+
+        context_lines = []
+        seen = set()
+
+        with self.lock:
+            for idx in top_indices:
+                node_id = self.node_embeddings_cache["ids"][idx]
+
+                # 获取 1-hop 邻居
+                edges = list(self.graph.out_edges(node_id, data=True)) + \
+                        list(self.graph.in_edges(node_id, data=True))
+
+                for u, v, d in edges:
+                    # 简单的边去重
+                    edge_key = tuple(sorted((u, v)))
+                    if edge_key in seen: continue
+                    seen.add(edge_key)
+
+                    u_name = self.graph.nodes[u].get('properties', {}).get('name', u)
+                    v_name = self.graph.nodes[v].get('properties', {}).get('name', v)
+                    rel = d.get('relation', 'related')
+                    context_lines.append(f"[{u_name}, {rel}, {v_name}]")
+
+        if not context_lines: return "暂无历史记录。"
+        # 返回前 15 条，避免 Prompt 溢出
+        return "\n".join(context_lines[:15])
 
     def load_schema(self, schema_path) -> Dict[str, Any]:
         """
@@ -68,7 +195,6 @@ class KTBuilder:
         except FileNotFoundError:
             return dict()
 
-
     def chunk_text(self, text) -> Tuple[List[str], Dict[str, str]]:
         """
             将文本分割成块，为每个文本块生成唯一的标识符。
@@ -79,8 +205,8 @@ class KTBuilder:
                 (chunks列表, chunk_id到chunk文本的映射)
             """
         if self.dataset_name in self.datasets_no_chunk:
-            chunks = [f"{text.get('title', '')} {text.get('text', '')}".strip() 
-                     if isinstance(text, dict) else str(text)]
+            chunks = [f"{text.get('title', '')} {text.get('text', '')}".strip()
+                      if isinstance(text, dict) else str(text)]
         else:
             chunks = [str(text)]
 
@@ -111,7 +237,7 @@ class KTBuilder:
         # 如果输入文本为空（None、空字符串等），直接返回占位符 [EMPTY_TEXT]
         if not text:
             return "[EMPTY_TEXT]"
-        
+
         if self.dataset_name == "graphrag-bench":
             # 安全字符集合
             safe_chars = {
@@ -119,28 +245,28 @@ class KTBuilder:
             }
             # 保留字母数字，空白，安全字符
             cleaned = "".join(
-                char for char in text 
+                char for char in text
                 if char.isalnum() or char.isspace() or char in safe_chars
             ).strip()
         else:
             # 更严格的安全字符
             safe_chars = {
-                *" .:,!?()-+="  
+                *" .:,!?()-+="
             }
             cleaned = "".join(
-                char for char in text 
+                char for char in text
                 if char.isalnum() or char.isspace() or char in safe_chars
             ).strip()
-        
+
         return cleaned if cleaned else "[EMPTY_AFTER_CLEANING]"
-    
+
     def save_chunks_to_file(self):
         """
         将文本块保存到文件中，支持增量更新已有文件
         """
         os.makedirs("output/chunks", exist_ok=True)
         chunk_file = f"output/chunks/{self.dataset_name}.txt"
-        
+
         existing_data = {}
         # 如果文件已存在，尝试读取其中的内容
         if os.path.exists(chunk_file):
@@ -170,9 +296,9 @@ class KTBuilder:
         with open(chunk_file, "w", encoding="utf-8") as f:
             for chunk_id, chunk_text in all_data.items():
                 f.write(f"id: {chunk_id}\tChunk: {chunk_text}\n")
-        
+
         logger.info(f"文本块数据已保存到 {chunk_file} ({len(all_data)} 个文本块)")
-    
+
     def extract_with_llm(self, prompt: str):
         """
        调用LLM API提取信息
@@ -193,7 +319,7 @@ class KTBuilder:
         # 将解析后的字典对象重新序列化为格式化的JSON字符串
         # ensure_ascii=False确保中文等非ASCII字符正常显示
         parsed_json = json.dumps(parsed_dict, ensure_ascii=False)
-        return parsed_json 
+        return parsed_json
 
     def token_cal(self, text: str):
         """
@@ -211,7 +337,7 @@ class KTBuilder:
 
         # 将文本编码为token序列，并返回序列长度
         return len(encoding.encode(text))
-    
+
     def _get_construction_prompt(self, chunk: str) -> str:
         """
             根据数据集名称生成相应的构建提示词
@@ -228,7 +354,7 @@ class KTBuilder:
 
         # 优先从配置中获取提示词类型
         # 如果配置中没有为该数据集指定 prompt_type，则使用默认的 "general"
-        prompt_type = "general"  # 默认提示词类型
+        prompt_type = "general"
         if self.config and hasattr(self.config, 'get_dataset_config'):
             dataset_config = self.config.get_dataset_config(self.dataset_name)
             # 尝试从数据集配置中获取 prompt_type
@@ -240,8 +366,35 @@ class KTBuilder:
         # - prompt_type: 具体的提示词类型
         # - schema: 模式定义JSON字符串
         # - chunk: 当前处理的文本块内容
-        return self.config.get_prompt_formatted("construction", prompt_type, schema=recommend_schema, chunk=chunk)
-    
+        return self.config.get_prompt_formatted(
+            "construction",
+            prompt_type,
+            schema=recommend_schema,
+            chunk=chunk)
+
+    # 【新增】增量 Prompt 获取方法
+    def _get_incremental_construction_prompt(self, chunk: str) -> str:
+        recommend_schema = json.dumps(self.schema, ensure_ascii=False)
+
+        # 1. 获取图驱动上下文
+        examples_context = self._get_relevant_subgraph_context(chunk)
+
+        # 2. 映射到增量 Prompt 模板 (例如 general -> general_incremental)
+        prompt_type = "general_incremental"
+        if self.config and hasattr(self.config, 'get_dataset_config'):
+            dataset_config = self.config.get_dataset_config(self.dataset_name)
+            # 尝试从数据集配置中获取 prompt_type
+            prompt_type = getattr(dataset_config, 'prompt_type', prompt_type)+"_incremental"
+
+        # 3. 注入 examples
+        return self.config.get_prompt_formatted(
+            "construction",
+            prompt_type,
+            schema=recommend_schema,
+            chunk=chunk,
+            examples=examples_context
+        )
+
     def _validate_and_parse_llm_response(self, prompt: str, llm_response: str) -> dict:
         """
            验证并解析LLM响应
@@ -255,7 +408,7 @@ class KTBuilder:
            """
         if llm_response is None:
             return None
-            
+
         try:
             # 累计计算提示词和响应的token总长度
             self.token_len += self.token_cal(prompt + llm_response)
@@ -264,8 +417,9 @@ class KTBuilder:
         except Exception as e:
             llm_response_str = str(llm_response) if llm_response is not None else "None"
             return None
-    
-    def _find_or_create_entity(self, entity_name: str, chunk_id: int, nodes_to_add: list, entity_type: str = None) -> str:
+
+    def _find_or_create_entity(self, entity_name: str, chunk_id: int, nodes_to_add: list,
+                               entity_type: str = None) -> str:
         """
             查找现有实体或创建新实体（批处理模式）
 
@@ -284,7 +438,7 @@ class KTBuilder:
                 (
                     n
                     for n, d in self.graph.nodes(data=True)
-                    if d.get("label") == "entity" and d["properties"]["name"] == entity_name # 筛选条件：标签为"entity"且名称匹配
+                    if d.get("label") == "entity" and d["properties"]["name"] == entity_name  # 筛选条件：标签为"entity"且名称匹配
                 ),
                 None,
             )
@@ -296,19 +450,19 @@ class KTBuilder:
                 properties = {"name": entity_name, "chunk id": chunk_id}
                 if entity_type:
                     properties["schema_type"] = entity_type
-                
+
                 nodes_to_add.append((
                     entity_node_id,
                     {
-                        "label": "entity", 
-                        "properties": properties, 
+                        "label": "entity",
+                        "properties": properties,
                         "level": 2
                     }
                 ))
                 self.node_counter += 1
-                
+
         return entity_node_id
-    
+
     def _validate_triple_format(self, triple: list) -> tuple:
         """
            验证并规范化三元组格式
@@ -324,11 +478,11 @@ class KTBuilder:
                 triple = triple[:3]
             elif len(triple) < 3:
                 return None
-            
+
             return tuple(triple)
         except Exception as e:
             return None
-    
+
     def _process_attributes(self, extracted_attr: dict, chunk_id: int, entity_types: dict = None) -> tuple[list, list]:
         """
         处理提取的属性信息
@@ -356,9 +510,9 @@ class KTBuilder:
                 nodes_to_add.append((
                     attr_node_id,
                     {
-                        "label": "attribute",                               # 节点标签为"attribute"
-                        "properties": {"name": attr, "chunk id": chunk_id}, # 节点属性包含属性名和来源文本块ID
-                        "level": 1,                                          # 节点层级为第1层（属性层）
+                        "label": "attribute",  # 节点标签为"attribute"
+                        "properties": {"name": attr, "chunk id": chunk_id},  # 节点属性包含属性名和来源文本块ID
+                        "level": 1,  # 节点层级为第1层（属性层）
                     }
                 ))
                 self.node_counter += 1
@@ -370,9 +524,9 @@ class KTBuilder:
                 # 将实体节点与属性节点之间的关系边添加到待添加列表
                 # 关系类型为"has_attribute"，表示实体拥有该属性
                 edges_to_add.append((entity_node_id, attr_node_id, "has_attribute"))
-        
+
         return nodes_to_add, edges_to_add
-    
+
     def _process_triples(self, extracted_triples: list, chunk_id: int, entity_types: dict = None) -> tuple[list, list]:
         """
             处理提取的三元组信息
@@ -411,7 +565,7 @@ class KTBuilder:
             # 将主语节点与宾语节点之间的关系边添加到待添加列表
             # 关系类型为三元组中的谓词(predicate)
             edges_to_add.append((subj_node_id, obj_node_id, pred))
-        
+
         return nodes_to_add, edges_to_add
 
     def process_level1_level2(self, chunk: str, id: int):
@@ -423,7 +577,14 @@ class KTBuilder:
                id: 文本块ID
         """
         # 生成构建知识图谱的提示词
-        prompt = self._get_construction_prompt(chunk)
+        # 根据模式选择 Prompt 方法 ---
+        if self.is_incremental:
+            logger.info("使用增量构建提示词")
+            prompt = self._get_incremental_construction_prompt(chunk)
+        else:
+            logger.info("使用完整构建提示词")
+            prompt = self._get_construction_prompt(chunk)
+
         # 调用LLM API提取信息
         llm_response = self.extract_with_llm(prompt)
 
@@ -433,10 +594,10 @@ class KTBuilder:
             return
 
         # 从解析后的响应中提取属性、三元组和实体类型信息
-        extracted_attr = parsed_response.get("attributes", {}) # 属性信息字典
-        extracted_triples = parsed_response.get("triples", []) # 三元组列表
-        entity_types = parsed_response.get("entity_types", {}) # 实体类型映射
-        
+        extracted_attr = parsed_response.get("attributes", {})  # 属性信息字典
+        extracted_triples = parsed_response.get("triples", [])  # 三元组列表
+        entity_types = parsed_response.get("entity_types", {})  # 实体类型映射
+
         # 处理属性信息，生成属性节点和"has_attribute"边
         attr_nodes, attr_edges = self._process_attributes(extracted_attr, id, entity_types)
         # 处理三元组信息，生成实体节点间的关系边
@@ -445,11 +606,11 @@ class KTBuilder:
         # 合并所有待添加的节点和边
         all_nodes = attr_nodes + triple_nodes
         all_edges = attr_edges + triple_edges
-        
+
         with self.lock:
             for node_id, node_data in all_nodes:
                 self.graph.add_node(node_id, **node_data)
-            
+
             for u, v, relation in all_edges:
                 self.graph.add_edge(u, v, relation=relation)
 
@@ -481,17 +642,17 @@ class KTBuilder:
             properties = {"name": entity_name, "chunk id": chunk_id}
             if entity_type:
                 properties["schema_type"] = entity_type
-                
+
             self.graph.add_node(
-                entity_node_id, 
-                label="entity", 
-                properties=properties, 
+                entity_node_id,
+                label="entity",
+                properties=properties,
                 level=2
             )
             self.node_counter += 1
-            
+
         return entity_node_id
-    
+
     def _process_attributes_agent(self, extracted_attr: dict, chunk_id: int, entity_types: dict = None):
         """
            处理属性信息（agent模式，直接操作图）
@@ -522,7 +683,7 @@ class KTBuilder:
                 entity_type = entity_types.get(entity) if entity_types else None
                 entity_node_id = self._find_or_create_entity_direct(entity, chunk_id, entity_type)
                 self.graph.add_edge(entity_node_id, attr_node_id, relation="has_attribute")
-    
+
     def _process_triples_agent(self, extracted_triples: list, chunk_id: int, entity_types: dict = None):
         """
        处理三元组信息（agent模式，直接操作图）
@@ -563,7 +724,13 @@ class KTBuilder:
                id: 文本块ID
            """
         # 生成构建知识图谱的提示词
-        prompt = self._get_construction_prompt(chunk)
+        # 根据模式选择 Prompt 方法 ---
+        if self.is_incremental:
+            logger.info("使用增量构建提示词")
+            prompt = self._get_incremental_construction_prompt(chunk)
+        else:
+            logger.info("使用完整构建提示词")
+            prompt = self._get_construction_prompt(chunk)
         # 调用LLM API提取信息
         llm_response = self.extract_with_llm(prompt)
 
@@ -582,7 +749,7 @@ class KTBuilder:
         extracted_attr = parsed_response.get("attributes", {})
         extracted_triples = parsed_response.get("triples", [])
         entity_types = parsed_response.get("entity_types", {})
-        
+
         with self.lock:
             # 处理属性信息（agent模式，直接操作图）
             self._process_attributes_agent(extracted_attr, id, entity_types)
@@ -600,7 +767,7 @@ class KTBuilder:
             # 定义数据集名称到模式文件路径的映射关系
             schema_paths = {
                 "hotpot": "schemas/hotpot.json",
-                "2wiki": "schemas/2wiki.json", 
+                "2wiki": "schemas/2wiki.json",
                 "musique": "schemas/musique.json",
                 "novel": "schemas/novels_chs.json",
                 "graphrag-bench": "schemas/graphrag-bench.json"
@@ -614,7 +781,7 @@ class KTBuilder:
             # 读取当前的模式文件内容
             with open(schema_path, 'r', encoding='utf-8') as f:
                 current_schema = json.load(f)
-            
+
             updated = False
 
             # 处理新发现的节点类型
@@ -643,15 +810,15 @@ class KTBuilder:
                         # 如果不存在，则添加到属性类型列表中
                         current_schema.setdefault("Attributes", []).append(new_attribute)
                         updated = True
-            
+
             # 如果有更新发生，则保存更新后的模式到文件
             if updated:
                 with open(schema_path, 'w', encoding='utf-8') as f:
                     json.dump(current_schema, f, ensure_ascii=False, indent=2)
-                
+
                 # Update the in-memory schema
                 self.schema = current_schema
-                
+
         except Exception as e:
             logger.error(f"Failed to update schema for dataset '{self.dataset_name}': {type(e).__name__}: {e}")
 
@@ -659,8 +826,8 @@ class KTBuilder:
         """
         使用Tree-Comm算法处理社区（第4层）
         """
-        # 筛选出图中所有level为2的节点（实体节点）
-        level2_nodes = [n for n, d in self.graph.nodes(data=True) if d['level'] == 2]
+        logger.info("筛选出图中所有level为2的节点（实体节点）")
+        level2_nodes = [n for n, d in self.graph.nodes(data=True) if d.get('label') == 'entity']
 
         # 记录开始时间，用于性能统计
         start_comm = time.time()
@@ -674,10 +841,10 @@ class KTBuilder:
             struct_weight=self.config.tree_comm.struct_weight,
         )
 
-        # 使用Tree-Comm算法检测社区，输入为level2的节点列表
+        logger.info("使用Tree-Comm算法检测社区，输入为level2的节点列表")
         comm_to_nodes = _tree_comm.detect_communities(level2_nodes)
 
-        # 为检测出的社区创建超级节点（level 4），并附带关键词信息
+        logger.info("为检测出的社区创建超级节点（level 4），并附带关键词信息")
         _tree_comm.create_super_nodes_with_keywords(comm_to_nodes, level=4)
 
         # 可选功能：将关键词连接到社区（当前被注释掉）
@@ -688,7 +855,7 @@ class KTBuilder:
         # 记录结束时间并计算耗时
         end_comm = time.time()
         logger.info(f"社区索引耗时: {end_comm - start_comm}s")
-    
+
     def _connect_keywords_to_communities(self):
         """
             将关键词连接到社区（可选功能）
@@ -720,9 +887,10 @@ class KTBuilder:
 
             # 将文档切分为多个文本块，并建立块ID到块内容的映射
             chunks, chunk2id = self.chunk_text(doc)
-            
+
             if not chunks or not chunk2id:
-                raise ValueError(f"No valid chunks generated from document. Chunks: {len(chunks)}, Chunk2ID: {len(chunk2id)}")
+                raise ValueError(
+                    f"No valid chunks generated from document. Chunks: {len(chunks)}, Chunk2ID: {len(chunk2id)}")
 
             # 遍历所有文本块进行处理
             for chunk in chunks:
@@ -741,7 +909,7 @@ class KTBuilder:
                 else:
                     # 标准模式：基础的知识图谱构建方式
                     self.process_level1_level2(chunk, id)
-                
+
         except Exception as e:
             error_msg = f"Error processing document: {type(e).__name__}: {str(e)}"
             raise Exception(error_msg) from e
@@ -767,7 +935,7 @@ class KTBuilder:
         all_futures = []
         processed_count = 0
         failed_count = 0
-        
+
         try:
             # 创建线程池执行器，使用计算得出的最大工作线程数
             with futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -789,12 +957,12 @@ class KTBuilder:
                             remaining_docs = total_docs - processed_count
                             # 估算剩余处理时间
                             estimated_remaining_time = remaining_docs * avg_time_per_doc
-                            
+
                             logger.info(f"进度: 已处理 {processed_count}/{total_docs} 个文档 "
-                                  f"({processed_count/total_docs*100:.1f}%) "
-                                  f"[{failed_count} 个失败] "
-                                  f"预计剩余时间: {estimated_remaining_time:.1f} 秒")
-                        
+                                        f"({processed_count / total_docs * 100:.1f}%) "
+                                        f"[{failed_count} 个失败] "
+                                        f"预计剩余时间: {estimated_remaining_time:.1f} 秒")
+
                     except Exception:
                         failed_count += 1
 
@@ -813,8 +981,6 @@ class KTBuilder:
         self.triple_deduplicate()
         # 处理第4层社区检测
         self.process_level4()
-
-       
 
     def triple_deduplicate(self):
         """
@@ -860,7 +1026,7 @@ class KTBuilder:
             output.append(relationship)
 
         return output
-    
+
     def save_graphml(self, output_path: str):
         """
            保存图为GraphML格式
@@ -869,7 +1035,7 @@ class KTBuilder:
                output_path: 输出路径
            """
         graph_processor.save_graph(self.graph, output_path)
-    
+
     def build_knowledge_graph(self, corpus):
         """
        构建知识图谱的主入口点

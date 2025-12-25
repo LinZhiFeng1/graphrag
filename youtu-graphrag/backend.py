@@ -32,6 +32,7 @@ try:
     from models.constructor import kt_gen as constructor
     from models.retriever import agentic_decomposer as decomposer, enhanced_kt_retriever as retriever
     from config import get_config, ConfigManager
+
     GRAPHRAG_AVAILABLE = True
     logger.info("✅ GraphRAG components loaded successfully")
 except ImportError as e:
@@ -58,6 +59,7 @@ app.add_middleware(
 active_connections: Dict[str, WebSocket] = {}
 config = None
 
+
 # WebSocket连接管理器，用于管理WebSocket连接
 class ConnectionManager:
     def __init__(self):
@@ -79,7 +81,9 @@ class ConnectionManager:
                 logger.error(f"Error sending message to {client_id}: {e}")
                 self.disconnect(client_id)
 
+
 manager = ConnectionManager()
+
 
 # 数据模型定义，定义各种API请求和响应的数据模型
 # Request/Response models
@@ -89,17 +93,21 @@ class FileUploadResponse(BaseModel):
     dataset_name: Optional[str] = None
     files_count: Optional[int] = None
 
+
 class GraphConstructionRequest(BaseModel):
     dataset_name: str
-    
+
+
 class GraphConstructionResponse(BaseModel):
     success: bool
     message: str
     graph_data: Optional[Dict] = None
 
+
 class QuestionRequest(BaseModel):
     question: str
     dataset_name: str
+
 
 class QuestionResponse(BaseModel):
     answer: str
@@ -108,6 +116,12 @@ class QuestionResponse(BaseModel):
     retrieved_chunks: List[str]
     reasoning_steps: List[Dict]
     visualization_data: Dict
+
+
+class GraphConstructionIncrementalRequest(BaseModel):
+    dataset_name: str  # 数据源（新上传的，例如 aviation_1）
+    target_dataset_name: Optional[str] = None  # 目标库（要合并到的，例如 aviation）
+
 
 async def send_progress_update(client_id: str, stage: str, progress: int, message: str):
     """通过WebSocket向客户端发送进度更新"""
@@ -118,6 +132,7 @@ async def send_progress_update(client_id: str, stage: str, progress: int, messag
         "message": message,
         "timestamp": datetime.now().isoformat()
     }, client_id)
+
 
 # 清理指定数据集的缓存文件
 async def clear_cache_files(dataset_name: str):
@@ -165,12 +180,13 @@ async def clear_cache_files(dataset_name: str):
                         logger.info(f"已清除缓存目录: {file_path}")
                 except Exception as e:
                     logger.warning(f"清除失败 {file_path}: {e}")
-        
+
         logger.info(f"数据集缓存清理完成: {dataset_name}")
-        
+
     except Exception as e:
         logger.error(f"Error clearing cache files for {dataset_name}: {e}")
         # Don't raise exception, just log the error
+
 
 # 根路径返回前端主页
 @app.get("/")
@@ -180,14 +196,16 @@ async def read_root():
         return FileResponse(frontend_path)
     return {"message": "Youtu-GraphRAG Unified Interface is running!", "status": "ok"}
 
+
 # 返回服务状态信息
 @app.get("/api/status")
 async def get_status():
     return {
-        "message": "Youtu-GraphRAG Unified Interface is running!", 
+        "message": "Youtu-GraphRAG Unified Interface is running!",
         "status": "ok",
         "graphrag_available": GRAPHRAG_AVAILABLE
     }
+
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -204,6 +222,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         # 当WebSocket连接断开时，从连接管理器中移除该连接
         manager.disconnect(client_id)
 
+
 @app.post("/api/upload", response_model=FileUploadResponse)
 async def upload_files(files: List[UploadFile] = File(...), client_id: str = "default"):
     """上传文件并为图谱构建做准备"""
@@ -214,7 +233,7 @@ async def upload_files(files: List[UploadFile] = File(...), client_id: str = "de
         # 清理文件名，使其符合文件系统命名规范
         dataset_name = "".join(c for c in original_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         dataset_name = dataset_name.replace(' ', '_')
-        
+
         # 如果数据集已存在，则添加计数器后缀以避免冲突
         base_name = dataset_name
         counter = 1
@@ -237,7 +256,7 @@ async def upload_files(files: List[UploadFile] = File(...), client_id: str = "de
             with open(file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
-            
+
             # 根据文件类型处理文件内容
             if file.filename.endswith('.txt'):
                 # 处理文本文件
@@ -269,12 +288,12 @@ async def upload_files(files: List[UploadFile] = File(...), client_id: str = "de
             # 更新进度（10%基础进度 + 文件处理进度）
             progress = 10 + (i + 1) * 80 // len(files)
             await send_progress_update(client_id, "upload", progress, f"Processed {file.filename}")
-        
+
         # 保存语料库数据到corpus.json文件
         corpus_path = f"{upload_dir}/corpus.json"
         with open(corpus_path, 'w', encoding='utf-8') as f:
             json.dump(corpus_data, f, ensure_ascii=False, indent=2)
-        
+
         # 创建数据集配置文件
         await create_dataset_config()
 
@@ -288,10 +307,11 @@ async def upload_files(files: List[UploadFile] = File(...), client_id: str = "de
             dataset_name=dataset_name,
             files_count=len(files)
         )
-    
+
     except Exception as e:
         await send_progress_update(client_id, "upload", 0, f"Upload failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 async def create_dataset_config():
     """
@@ -301,53 +321,54 @@ async def create_dataset_config():
     # 总是使用demo.json模式文件以保证一致性
     schema_path = "schemas/demo.json"
     os.makedirs("schemas", exist_ok=True)
-    
+
     # 检查demo.json模式文件是否存在，如果不存在则创建标准模式
     if not os.path.exists(schema_path):
         demo_schema = {
             "Nodes": [
-                "person",# 人物
-                "location",# 地点
-                "organization",# 组织机构
-                "event", # 事件
-                "object",# 物体
-                "concept",# 概念
-                "time_period", # 时间段
-                "creative_work", # 创作作品
-                "biological_entity",# 生物实体
-                "natural_phenomenon"# 自然现象
+                "person",  # 人物
+                "location",  # 地点
+                "organization",  # 组织机构
+                "event",  # 事件
+                "object",  # 物体
+                "concept",  # 概念
+                "time_period",  # 时间段
+                "creative_work",  # 创作作品
+                "biological_entity",  # 生物实体
+                "natural_phenomenon"  # 自然现象
             ],
             "Relations": [
-                "is_a", # 是...的一种
-                "part_of", # 是...的一部分
-                "located_in", # 位于...
-                "created_by",# 由...创建
-                "used_by", # 被...使用
-                "participates_in", # 参与...
-                "related_to", #  相关...
-                "belongs_to", # 属于...
-                "influences", # 影响...
-                "precedes",#  在...之前
-                "arrives_in", # 到达...
-                "comparable_to" # 可比较...
+                "is_a",  # 是...的一种
+                "part_of",  # 是...的一部分
+                "located_in",  # 位于...
+                "created_by",  # 由...创建
+                "used_by",  # 被...使用
+                "participates_in",  # 参与...
+                "related_to",  # 相关...
+                "belongs_to",  # 属于...
+                "influences",  # 影响...
+                "precedes",  # 在...之前
+                "arrives_in",  # 到达...
+                "comparable_to"  # 可比较...
             ],
             "Attributes": [
-                "name", # 名称
-                "date", # 日期
-                "size", # 大小
-                "type", # 类型
-                "description",# 描述
-                "status",# 状态
-                "quantity", # 数量
-                "value",# 价值
-                "position",# 位置
-                "duration",# 持续时间
-                "time"# 时间
+                "name",  # 名称
+                "date",  # 日期
+                "size",  # 大小
+                "type",  # 类型
+                "description",  # 描述
+                "status",  # 状态
+                "quantity",  # 数量
+                "value",  # 价值
+                "position",  # 位置
+                "duration",  # 持续时间
+                "time"  # 时间
             ]
         }
-        
+
         with open(schema_path, 'w') as f:
             json.dump(demo_schema, f, indent=2)
+
 
 @app.post("/api/construct-graph", response_model=GraphConstructionResponse)
 async def construct_graph(request: GraphConstructionRequest, client_id: str = "default"):
@@ -363,20 +384,21 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
     """
     try:
         if not GRAPHRAG_AVAILABLE:
-            raise HTTPException(status_code=503, detail="GraphRAG components not available. Please install or configure them.")
+            raise HTTPException(status_code=503,
+                                detail="GraphRAG components not available. Please install or configure them.")
 
         # 从请求中获取数据集名称
         dataset_name = request.dataset_name
 
         # 发送进度更新：开始清理旧缓存文件，进度2%
         await send_progress_update(client_id, "construction", 2, "清理旧缓存文件...")
-        
+
         # 清理构建前的所有缓存文件
         await clear_cache_files(dataset_name)
 
         # 发送进度更新：开始初始化图构建器，进度5%
         await send_progress_update(client_id, "construction", 5, "初始化图构建器...")
-        
+
         # 获取数据集路径
         corpus_path = f"data/uploaded/{dataset_name}/corpus.json"
 
@@ -410,14 +432,14 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
 
         # 发送进度更新：开始实体关系抽取，进度20%
         await send_progress_update(client_id, "construction", 20, "开始实体关系抽取...")
-        
+
         # 定义同步构建图谱的函数
         def build_graph_sync():
             return builder.build_knowledge_graph(corpus_path)
 
         # 获取事件循环，以便在执行器中运行同步函数
         loop = asyncio.get_event_loop()
-        
+
         # 定义不同构建阶段的进度模拟
         stages = [
             (30, "抽取实体和关系中..."),
@@ -425,15 +447,16 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
             (70, "构建层次结构中..."),
             (85, "优化图结构中..."),
         ]
+
         # 定义进度更新的异步函数
         async def update_progress():
             for progress, message in stages:
                 await asyncio.sleep(3)  # 模拟工作时间
                 await send_progress_update(client_id, "construction", progress, message)
-        
+
         # 同时运行图谱构建和进度更新
         progress_task = asyncio.create_task(update_progress())
-        
+
         try:
             # 在执行器中运行图谱构建函数，避免阻塞主线程
             knowledge_graph = await loop.run_in_executor(None, build_graph_sync)
@@ -452,16 +475,126 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
 
         # 发送进度更新：图构建完成，进度100%
         await send_progress_update(client_id, "construction", 100, "图构建完成!")
-        
+
         return GraphConstructionResponse(
             success=True,
             message="Knowledge graph constructed successfully",
             graph_data=graph_vis_data
         )
-    
+
     except Exception as e:
         await send_progress_update(client_id, "construction", 0, f"构建失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/construct-graph-incremental", response_model=GraphConstructionResponse)
+async def construct_graph_incremental(request: GraphConstructionIncrementalRequest, client_id: str = "default"):
+    """
+    增量构建接口：保留旧数据，使用增量 Prompt，支持指定目标数据集
+    """
+    try:
+        if not GRAPHRAG_AVAILABLE:
+            raise HTTPException(status_code=503, detail="GraphRAG unavailable")
+
+        # 1. 确定源数据和目标数据
+        source_dataset = request.dataset_name  # 例如 "aviation_1"
+        # 如果前端没传 target，就默认是 source（兼容旧逻辑）
+        target_dataset = request.target_dataset_name or source_dataset
+
+        logger.info(f"🔄 增量任务: 源数据[{source_dataset}] -> 合并入 -> 目标图谱[{target_dataset}]")
+
+        await send_progress_update(client_id, "construction", 5, "🚀 启动增量构建 (热加载中)...")
+        # 2. 确定语料路径 (使用源数据的语料)
+        corpus_path = f"data/uploaded/{source_dataset}/corpus.json"
+        if not os.path.exists(corpus_path):
+            # 尝试回退逻辑
+            if source_dataset == "demo": corpus_path = "data/demo/demo_corpus.json"
+
+        if not os.path.exists(corpus_path):
+            raise HTTPException(status_code=404, detail=f"Source corpus not found: {corpus_path}")
+
+        # 发送进度更新：开始加载配置和语料库，进度10%
+        await send_progress_update(client_id, "construction", 10, "加载配置和语料库...")
+
+        # 初始化全局配置
+        # 3. 初始化构建器 (使用【目标】数据集的配置和图谱)
+        # 这样 KTBuilder 会去加载 target_dataset_new.json
+        global config
+        if config is None:
+            config = get_config("config/base_config.yaml")
+
+        # 根据配置动态选择schema，未指定则使用默认的demo.json
+        # 获取目标数据集的 schema (如果 aviation_1 没有配置，就用 aviation 的)
+        # 注意：这里我们优先尝试获取 target 的配置，因为它肯定存在
+        dataset_config = config.get_dataset_config(target_dataset)
+        schema_path = dataset_config.schema_path if dataset_config else "schemas/demo.json"
+        logger.info(f"使用的模式文件: {schema_path}")
+
+        # ⚠️ 关键点：初始化 Builder 时用 target_dataset
+        builder = constructor.KTBuilder(
+            target_dataset,  # <--- 名字传 Target (aviation)
+            schema_path,
+            mode=config.construction.mode,
+            config=config,
+            is_incremental=True
+        )
+
+        await send_progress_update(client_id, "construction", 20, f"开始从 {source_dataset} 增量抽取...")
+
+        # 4. 执行构建 (传入源数据的语料路径)
+        def build_graph_sync():
+            # ⚠️ 关键点：构建时用 source corpus
+            return builder.build_knowledge_graph(corpus_path)
+
+        # 获取事件循环，以便在执行器中运行同步函数
+        loop = asyncio.get_event_loop()
+
+        # 定义不同构建阶段的进度模拟
+        stages = [
+            (30, "抽取实体和关系中..."),
+            (50, "社区检测中..."),
+            (70, "构建层次结构中..."),
+            (85, "优化图结构中..."),
+        ]
+
+        # 定义进度更新的异步函数
+        async def update_progress():
+            for progress, message in stages:
+                await asyncio.sleep(3)  # 模拟工作时间
+                await send_progress_update(client_id, "construction", progress, message)
+
+        # 同时运行图谱构建和进度更新
+        progress_task = asyncio.create_task(update_progress())
+
+        try:
+            # 在执行器中运行图谱构建函数，避免阻塞主线程
+            await loop.run_in_executor(None, build_graph_sync)
+            # 构建完成后取消进度更新任务
+            progress_task.cancel()
+        except Exception as e:
+            progress_task.cancel()
+            raise e
+
+        # 发送进度更新：准备可视化数据，进度95%
+        await send_progress_update(client_id, "construction", 95, "准备可视化数据...")
+
+        # 加载构建好的图谱用于可视化
+        graph_path = f"output/graphs/{target_dataset}_new.json"
+        graph_vis_data = await prepare_graph_visualization(graph_path)
+
+        # 发送进度更新：图构建完成，进度100%
+        await send_progress_update(client_id, "construction", 100, "图构建完成!")
+
+        return GraphConstructionResponse(
+            success=True,
+            message=f"Merged {source_dataset} into {target_dataset}",
+            graph_data=graph_vis_data
+        )
+    except Exception as e:
+        await send_progress_update(client_id, "construction", 0, f"构建失败: {str(e)}")
+        logger.error(f"构建失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # 加载并解析图数据文件
 # 参数 graph_path: 图谱数据文件的路径
@@ -476,7 +609,7 @@ async def prepare_graph_visualization(graph_path: str) -> Dict:
         else:
             # 如果文件不存在，返回空的可视化数据结构
             return {"nodes": [], "links": [], "categories": [], "stats": {}}
-        
+
         # 根据不同的图谱数据格式进行处理
         if isinstance(graph_data, list):
             # 如果数据是列表格式，表示GraphRAG的关系列表格式
@@ -486,10 +619,11 @@ async def prepare_graph_visualization(graph_path: str) -> Dict:
             return convert_standard_format(graph_data)
         else:
             return {"nodes": [], "links": [], "categories": [], "stats": {}}
-    
+
     except Exception as e:
         logger.error(f"Error preparing visualization: {e}")
         return {"nodes": [], "links": [], "categories": [], "stats": {}}
+
 
 def convert_graphrag_format(graph_data: List) -> Dict:
     """
@@ -509,7 +643,7 @@ def convert_graphrag_format(graph_data: List) -> Dict:
     # links: 存储节点之间的关系连线
     nodes_dict = {}
     links = []
-    
+
     # 遍历GraphRAG格式的图数据中的每一项关系
     for item in graph_data:
         if not isinstance(item, dict):
@@ -570,7 +704,7 @@ def convert_graphrag_format(graph_data: List) -> Dict:
                 "color": f"hsl({i * 360 / len(categories_set)}, 70%, 60%)"
             }
         })
-    
+
     nodes = list(nodes_dict.values())
 
     # 返回符合ECharts要求的图数据结构
@@ -585,6 +719,7 @@ def convert_graphrag_format(graph_data: List) -> Dict:
             "displayed_edges": len(links[:1000])
         }
     }
+
 
 def convert_standard_format(graph_data: Dict) -> Dict:
     """将标准格式 {nodes: [], edges: []} 转换为 ECharts 格式"""
@@ -609,7 +744,7 @@ def convert_standard_format(graph_data: Dict) -> Dict:
                 "color": f"hsl({i * 360 / len(node_types)}, 70%, 60%)"
             }
         })
-    
+
     # 处理节点数据，将原始节点转换为ECharts格式
     for node in graph_data.get("nodes", []):
         nodes.append({
@@ -629,7 +764,7 @@ def convert_standard_format(graph_data: Dict) -> Dict:
             "name": edge.get("relation", "related_to"),
             "value": edge.get("weight", 1)
         })
-    
+
     return {
         "nodes": nodes[:500],  # Limit for performance
         "links": links[:1000],
@@ -642,6 +777,7 @@ def convert_standard_format(graph_data: Dict) -> Dict:
         }
     }
 
+
 # 实现智能问答功能，采用IRCoT(Iterative Retrieval with Chain-of-Thought)
 @app.post("/api/ask-question", response_model=QuestionResponse)
 async def ask_question(request: QuestionRequest, client_id: str = "default"):
@@ -649,7 +785,8 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
     try:
         # 检查 GraphRAG 组件是否可用
         if not GRAPHRAG_AVAILABLE:
-            raise HTTPException(status_code=503, detail="GraphRAG components not available. Please install or configure them.")
+            raise HTTPException(status_code=503,
+                                detail="GraphRAG components not available. Please install or configure them.")
 
         # 获取数据集名称和问题内容
         dataset_name = request.dataset_name
@@ -678,6 +815,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
 
         # 初始化问题分解器和检索器
         graphq = decomposer.GraphQ(dataset_name, config=config)
+        logger.info("问题分解器初始化完成")
         kt_retriever = retriever.KTRetriever(
             dataset_name,
             graph_path,
@@ -687,6 +825,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             mode="agent",  # 强制 agent 模式
             config=config
         )
+        logger.info("检索器初始化完成")
 
         await send_progress_update(client_id, "retrieval", 40, "构建索引...")
         # 构建检索索引
@@ -697,6 +836,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         # Helper functions (复用 main.py 逻辑的精简版)
         def _dedup(items):
             return list({x: None for x in items}.keys())
+
         def _merge_chunk_contents(ids, mapping):
             return [mapping.get(i, f"[Missing content for chunk {i}]") for i in ids]
 
@@ -727,7 +867,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         for idx, sq in enumerate(sub_questions):
             sq_text = sq.get("sub-question", question)
 
-            logger.info(f"开始处理检索结果，子问题 {idx+1}/{len(sub_questions)}: {sq_text}")
+            logger.info(f"开始处理检索结果，子问题 {idx + 1}/{len(sub_questions)}: {sq_text}")
             retrieval_results, elapsed = kt_retriever.process_retrieval_results(
                 sq_text,
                 top_k=config.retrieval.top_k_filter,
@@ -768,11 +908,12 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         thoughts = []
 
         # Initial answer attempt
-        #todo:感觉排序有问题
+        # todo:感觉排序有问题
         initial_triples = _dedup(list(all_triples))
         initial_chunk_ids = list(set(all_chunk_ids))
         initial_chunk_contents = _merge_chunk_contents(initial_chunk_ids, all_chunk_contents)
-        context_initial = "=== Triples ===\n" + "\n".join(initial_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(initial_chunk_contents[:10])
+        context_initial = "=== Triples ===\n" + "\n".join(initial_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(
+            initial_chunk_contents[:10])
         init_prompt = kt_retriever.generate_prompt(question, context_initial)
         try:
             initial_answer = kt_retriever.generate_answer(init_prompt)
@@ -787,7 +928,8 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             loop_chunk_ids = list(set(all_chunk_ids))
             loop_chunk_contents = _merge_chunk_contents(loop_chunk_ids, all_chunk_contents)
             # 构建当前上下文
-            loop_ctx = "=== Triples ===\n" + "\n".join(loop_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(loop_chunk_contents[:10])
+            loop_ctx = "=== Triples ===\n" + "\n".join(loop_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(
+                loop_chunk_contents[:10])
             # 生成推理提示词
             loop_prompt = f"""
 You are an expert knowledge assistant using iterative retrieval with chain-of-thought reasoning.
@@ -866,7 +1008,8 @@ Your reasoning:
                 "total_triples": len(final_triples),
                 "total_chunks": len(final_chunk_contents),
                 "sub_questions_count": len(sub_questions),
-                "triples_by_subquery": [s.get("triples_count", 0) for s in reasoning_steps if s.get("type") == "sub_question"]
+                "triples_by_subquery": [s.get("triples_count", 0) for s in reasoning_steps if
+                                        s.get("type") == "sub_question"]
             }
         }
 
@@ -882,6 +1025,7 @@ Your reasoning:
         await send_progress_update(client_id, "retrieval", 0, f"问答处理失败: {str(e)}")
         logger.error(f"处理问题失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 def prepare_subquery_visualization(sub_questions: List[Dict], reasoning_steps: List[Dict]) -> Dict:
     """子问题分解可视化"""
@@ -904,7 +1048,7 @@ def prepare_subquery_visualization(sub_questions: List[Dict], reasoning_steps: L
         })
         # 添加从原始问题到子问题的连接线，表示问题分解关系
         links.append({"source": "original", "target": sub_id, "name": "分解为"})
-    
+
     return {
         "nodes": nodes,
         "links": links,
@@ -913,6 +1057,7 @@ def prepare_subquery_visualization(sub_questions: List[Dict], reasoning_steps: L
             {"name": "sub_question", "itemStyle": {"color": "#4ecdc4"}}
         ]
     }
+
 
 def prepare_retrieved_graph_visualization(triples: List[str]) -> Dict:
     """检索到的知识图谱可视化"""
@@ -932,7 +1077,7 @@ def prepare_retrieved_graph_visualization(triples: List[str]) -> Dict:
                 # 确保三元组包含3个部分（主体、关系、客体）
                 if len(parts) == 3:
                     source, relation, target = parts
-                    
+
                     for entity in [source, target]:
                         # 避免重复添加相同节点
                         if entity not in node_set:
@@ -953,12 +1098,13 @@ def prepare_retrieved_graph_visualization(triples: List[str]) -> Dict:
                     })
         except:
             continue
-    
+
     return {
         "nodes": nodes,
         "links": links,
         "categories": [{"name": "entity", "itemStyle": {"color": "#95de64"}}]
     }
+
 
 def prepare_reasoning_flow_visualization(reasoning_steps: List[Dict]) -> Dict:
     """推理流程可视化"""
@@ -972,17 +1118,18 @@ def prepare_reasoning_flow_visualization(reasoning_steps: List[Dict]) -> Dict:
             "chunks_count": step.get("chunks_count", 0),
             "processing_time": step.get("processing_time", 0)
         })
-    
+
     return {
         "steps": steps_data,
         "timeline": [step["processing_time"] for step in steps_data]
     }
 
+
 @app.get("/api/datasets")
 async def get_datasets():
     """获取可用数据集列表"""
     datasets = []
-    
+
     # 检查已上传数据集
     upload_dir = "data/uploaded"
     if os.path.exists(upload_dir):
@@ -998,7 +1145,7 @@ async def get_datasets():
                         "type": "uploaded",
                         "status": status
                     })
-    
+
     # 加入demo数据集
     demo_corpus = "data/demo/demo_corpus.json"
     if os.path.exists(demo_corpus):
@@ -1006,11 +1153,12 @@ async def get_datasets():
         status = "ready" if os.path.exists(demo_graph) else "needs_construction"
         datasets.append({
             "name": "demo",
-            "type": "demo", 
+            "type": "demo",
             "status": status
         })
-    
+
     return {"datasets": datasets}
+
 
 @app.delete("/api/datasets/{dataset_name}")
 async def delete_dataset(dataset_name: str):
@@ -1038,34 +1186,35 @@ async def delete_dataset(dataset_name: str):
             os.remove(graph_path)
             # 记录被删除的图谱文件路径
             deleted_files.append(graph_path)
-        
+
         # 删除数据集特定的模式文件（如果存在）
         # schema_path = f"schemas/{dataset_name}.json"
         # if os.path.exists(schema_path):
         #     os.remove(schema_path)
         #     deleted_files.append(schema_path)
-        
+
         # 删除FAISS检索缓存目录
         cache_dir = f"retriever/faiss_cache_new/{dataset_name}"
         if os.path.exists(cache_dir):
             import shutil
             shutil.rmtree(cache_dir)
             deleted_files.append(cache_dir)
-        
+
         # 删除文本分块文件
         chunk_file = f"output/chunks/{dataset_name}.txt"
         if os.path.exists(chunk_file):
             os.remove(chunk_file)
             deleted_files.append(chunk_file)
-        
+
         return {
             "success": True,
             "message": f"Dataset '{dataset_name}' deleted successfully",
             "deleted_files": deleted_files
         }
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete dataset: {str(e)}")
+
 
 # 路径参数 dataset_name: 数据集名称
 # 查询参数 client_id: 客户端ID，用于发送进度更新
@@ -1075,7 +1224,8 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
     try:
         # 检查GraphRAG组件是否可用
         if not GRAPHRAG_AVAILABLE:
-            raise HTTPException(status_code=503, detail="GraphRAG components not available. Please install or configure them.")
+            raise HTTPException(status_code=503,
+                                detail="GraphRAG components not available. Please install or configure them.")
 
         # 检查数据集是否存在
         corpus_path = f"data/uploaded/{dataset_name}/corpus.json"
@@ -1087,22 +1237,22 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
 
         # 发送进度更新：开始重新构图，进度5%
         await send_progress_update(client_id, "reconstruction", 5, "开始重新构图...")
-        
+
         # 删除现有图谱文件
         graph_path = f"output/graphs/{dataset_name}_new.json"
         if os.path.exists(graph_path):
             os.remove(graph_path)
             await send_progress_update(client_id, "reconstruction", 15, "已删除旧图谱文件...")
-        
+
         # 删除现有的缓存文件
         cache_dir = f"retriever/faiss_cache_new/{dataset_name}"
         if os.path.exists(cache_dir):
             import shutil
             shutil.rmtree(cache_dir)
             await send_progress_update(client_id, "reconstruction", 25, "已清理缓存文件...")
-        
+
         await send_progress_update(client_id, "reconstruction", 35, "重新初始化图构建器...")
-        
+
         # 初始化配置
         global config
         if config is None:
@@ -1111,7 +1261,7 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
         # 根据配置动态选择schema，未指定则使用默认的demo.json
         schema_path = config.get_dataset_config(dataset_name).schema_path if config else "schemas/demo.json"
         logger.info(f"使用的模式文件: {schema_path}")
-        
+
         # 初始化KTBuilder图构建器
         builder = constructor.KTBuilder(
             dataset_name,
@@ -1119,7 +1269,7 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
             mode=config.construction.mode,
             config=config
         )
-        
+
         await send_progress_update(client_id, "reconstruction", 50, "开始重新构建图谱...")
 
         # 定义同步构建图谱的函数
@@ -1136,7 +1286,7 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
             (90, "重新构建层次结构中..."),
             (95, "重新优化图结构中..."),
         ]
-        
+
         # 定义进度更新的异步函数
         async def update_progress():
             for progress, message in stages:
@@ -1145,7 +1295,7 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
 
         # 同时运行图谱构建和进度更新
         progress_task = asyncio.create_task(update_progress())
-        
+
         try:
             # 在执行器中运行图谱构建函数，避免阻塞
             knowledge_graph = await loop.run_in_executor(None, build_graph_sync)
@@ -1157,23 +1307,24 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
 
         # 发送进度更新：图谱重构完成，进度100%
         await send_progress_update(client_id, "reconstruction", 100, "图谱重构完成!")
-        
+
         return {
             "success": True,
             "message": "Dataset reconstructed successfully",
             "dataset_name": dataset_name
         }
-    
+
     except Exception as e:
         await send_progress_update(client_id, "reconstruction", 0, f"重构失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # 获取指定数据集的图谱可视化数据，如果文件不存在则返回示例数据。
 @app.get("/api/graph/{dataset_name}")
 async def get_graph_data(dataset_name: str):
     """获取图谱可视化数据"""
     graph_path = f"output/graphs/{dataset_name}_new.json"
-    
+
     if not os.path.exists(graph_path):
         # 文件不存在，返回示例数据
         return {
@@ -1190,8 +1341,9 @@ async def get_graph_data(dataset_name: str):
             ],
             "stats": {"total_nodes": 2, "total_edges": 1, "displayed_nodes": 2, "displayed_edges": 1}
         }
-    
+
     return await prepare_graph_visualization(graph_path)
+
 
 # 应用启动时创建必要的目录结构，并通过Uvicorn启动FastAPI应用服务
 @app.on_event("startup")
@@ -1201,8 +1353,9 @@ async def startup_event():
     os.makedirs("output/graphs", exist_ok=True)
     os.makedirs("output/logs", exist_ok=True)
     os.makedirs("schemas", exist_ok=True)
-    
+
     logger.info("🚀 Youtu-GraphRAG Unified Interface initialized")
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8087)
