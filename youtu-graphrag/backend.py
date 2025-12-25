@@ -119,7 +119,8 @@ class QuestionResponse(BaseModel):
 
 
 class GraphConstructionIncrementalRequest(BaseModel):
-    dataset_name: str
+    dataset_name: str  # 数据源（新上传的，例如 aviation_1）
+    target_dataset_name: Optional[str] = None  # 目标库（要合并到的，例如 aviation）
 
 
 async def send_progress_update(client_id: str, stage: str, progress: int, message: str):
@@ -489,49 +490,60 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
 @app.post("/api/construct-graph-incremental", response_model=GraphConstructionResponse)
 async def construct_graph_incremental(request: GraphConstructionIncrementalRequest, client_id: str = "default"):
     """
-    增量构建接口：保留旧数据，使用增量 Prompt
+    增量构建接口：保留旧数据，使用增量 Prompt，支持指定目标数据集
     """
     try:
-        if not GRAPHRAG_AVAILABLE: raise HTTPException(status_code=503, detail="GraphRAG unavailable")
+        if not GRAPHRAG_AVAILABLE:
+            raise HTTPException(status_code=503, detail="GraphRAG unavailable")
 
-        dataset_name = request.dataset_name
+        # 1. 确定源数据和目标数据
+        source_dataset = request.dataset_name  # 例如 "aviation_1"
+        # 如果前端没传 target，就默认是 source（兼容旧逻辑）
+        target_dataset = request.target_dataset_name or source_dataset
+
+        logger.info(f"🔄 增量任务: 源数据[{source_dataset}] -> 合并入 -> 目标图谱[{target_dataset}]")
 
         await send_progress_update(client_id, "construction", 5, "🚀 启动增量构建 (热加载中)...")
-        # 获取数据集路径
-        corpus_path = f"data/uploaded/{dataset_name}/corpus.json"
-
-        # 如果上传数据集不存在，尝试使用demo数据集
+        # 2. 确定语料路径 (使用源数据的语料)
+        corpus_path = f"data/uploaded/{source_dataset}/corpus.json"
         if not os.path.exists(corpus_path):
-            corpus_path = "data/demo/demo_corpus.json"
+            # 尝试回退逻辑
+            if source_dataset == "demo": corpus_path = "data/demo/demo_corpus.json"
 
-        # 如果连demo数据集也不存在，则抛出404错误
         if not os.path.exists(corpus_path):
-            raise HTTPException(status_code=404, detail="Dataset not found")
+            raise HTTPException(status_code=404, detail=f"Source corpus not found: {corpus_path}")
 
         # 发送进度更新：开始加载配置和语料库，进度10%
         await send_progress_update(client_id, "construction", 10, "加载配置和语料库...")
 
         # 初始化全局配置
+        # 3. 初始化构建器 (使用【目标】数据集的配置和图谱)
+        # 这样 KTBuilder 会去加载 target_dataset_new.json
         global config
         if config is None:
             config = get_config("config/base_config.yaml")
 
         # 根据配置动态选择schema，未指定则使用默认的demo.json
-        schema_path = config.get_dataset_config(dataset_name).schema_path if config else "schemas/demo.json"
+        # 获取目标数据集的 schema (如果 aviation_1 没有配置，就用 aviation 的)
+        # 注意：这里我们优先尝试获取 target 的配置，因为它肯定存在
+        dataset_config = config.get_dataset_config(target_dataset)
+        schema_path = dataset_config.schema_path if dataset_config else "schemas/demo.json"
         logger.info(f"使用的模式文件: {schema_path}")
-        # ✅ 初始化 Builder，传入 is_incremental=True
+
+        # ⚠️ 关键点：初始化 Builder 时用 target_dataset
         builder = constructor.KTBuilder(
-            dataset_name,
+            target_dataset,  # <--- 名字传 Target (aviation)
             schema_path,
             mode=config.construction.mode,
             config=config,
             is_incremental=True
         )
 
-        await send_progress_update(client_id, "construction", 20, "🔍 开始增量语义抽取...")
+        await send_progress_update(client_id, "construction", 20, f"开始从 {source_dataset} 增量抽取...")
 
-        # 执行构建
+        # 4. 执行构建 (传入源数据的语料路径)
         def build_graph_sync():
+            # ⚠️ 关键点：构建时用 source corpus
             return builder.build_knowledge_graph(corpus_path)
 
         # 获取事件循环，以便在执行器中运行同步函数
@@ -556,7 +568,7 @@ async def construct_graph_incremental(request: GraphConstructionIncrementalReque
 
         try:
             # 在执行器中运行图谱构建函数，避免阻塞主线程
-            knowledge_graph = await loop.run_in_executor(None, build_graph_sync)
+            await loop.run_in_executor(None, build_graph_sync)
             # 构建完成后取消进度更新任务
             progress_task.cancel()
         except Exception as e:
@@ -567,15 +579,20 @@ async def construct_graph_incremental(request: GraphConstructionIncrementalReque
         await send_progress_update(client_id, "construction", 95, "准备可视化数据...")
 
         # 加载构建好的图谱用于可视化
-        graph_path = f"output/graphs/{dataset_name}_new.json"
+        graph_path = f"output/graphs/{target_dataset}_new.json"
         graph_vis_data = await prepare_graph_visualization(graph_path)
 
         # 发送进度更新：图构建完成，进度100%
         await send_progress_update(client_id, "construction", 100, "图构建完成!")
 
-        return GraphConstructionResponse(success=True, message="Incremental update finished", graph_data=graph_vis_data)
+        return GraphConstructionResponse(
+            success=True,
+            message=f"Merged {source_dataset} into {target_dataset}",
+            graph_data=graph_vis_data
+        )
     except Exception as e:
         await send_progress_update(client_id, "construction", 0, f"构建失败: {str(e)}")
+        logger.error(f"构建失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -798,6 +815,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
 
         # 初始化问题分解器和检索器
         graphq = decomposer.GraphQ(dataset_name, config=config)
+        logger.info("问题分解器初始化完成")
         kt_retriever = retriever.KTRetriever(
             dataset_name,
             graph_path,
@@ -807,6 +825,7 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             mode="agent",  # 强制 agent 模式
             config=config
         )
+        logger.info("检索器初始化完成")
 
         await send_progress_update(client_id, "retrieval", 40, "构建索引...")
         # 构建检索索引
