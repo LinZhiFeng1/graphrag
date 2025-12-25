@@ -724,7 +724,13 @@ class KTBuilder:
                id: 文本块ID
            """
         # 生成构建知识图谱的提示词
-        prompt = self._get_construction_prompt(chunk)
+        # 根据模式选择 Prompt 方法 ---
+        if self.is_incremental:
+            logger.info("使用增量构建提示词")
+            prompt = self._get_incremental_construction_prompt(chunk)
+        else:
+            logger.info("使用完整构建提示词")
+            prompt = self._get_construction_prompt(chunk)
         # 调用LLM API提取信息
         llm_response = self.extract_with_llm(prompt)
 
