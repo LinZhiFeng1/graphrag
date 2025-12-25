@@ -49,7 +49,7 @@ class KTBuilder:
         self.node_counter = 0
 
         logger.info("正在初始化语义模型 (BGE-M3)...")
-        self.embedder = SentenceTransformer(config.embeddings.model_name)
+        self.embedder = SentenceTransformer(config.embeddings.model_name, device=config.embeddings.device)
         self.node_embeddings_cache = {"ids": [], "vecs": None}
 
         if self.is_incremental:
@@ -176,7 +176,6 @@ class KTBuilder:
 
         if not context_lines: return "暂无历史记录。"
         # 返回前 15 条，避免 Prompt 溢出
-        # todo gemini 没有15条排序么
         return "\n".join(context_lines[:15])
 
     def load_schema(self, schema_path) -> Dict[str, Any]:
@@ -580,8 +579,10 @@ class KTBuilder:
         # 生成构建知识图谱的提示词
         # 根据模式选择 Prompt 方法 ---
         if self.is_incremental:
+            logger.info("使用增量构建提示词")
             prompt = self._get_incremental_construction_prompt(chunk)
         else:
+            logger.info("使用完整构建提示词")
             prompt = self._get_construction_prompt(chunk)
 
         # 调用LLM API提取信息
@@ -819,8 +820,8 @@ class KTBuilder:
         """
         使用Tree-Comm算法处理社区（第4层）
         """
-        # 筛选出图中所有level为2的节点（实体节点）
-        level2_nodes = [n for n, d in self.graph.nodes(data=True) if d['level'] == 2]
+        logger.info("筛选出图中所有level为2的节点（实体节点）")
+        level2_nodes = [n for n, d in self.graph.nodes(data=True) if d.get('label') == 'entity']
 
         # 记录开始时间，用于性能统计
         start_comm = time.time()
@@ -834,10 +835,10 @@ class KTBuilder:
             struct_weight=self.config.tree_comm.struct_weight,
         )
 
-        # 使用Tree-Comm算法检测社区，输入为level2的节点列表
+        logger.info("使用Tree-Comm算法检测社区，输入为level2的节点列表")
         comm_to_nodes = _tree_comm.detect_communities(level2_nodes)
 
-        # 为检测出的社区创建超级节点（level 4），并附带关键词信息
+        logger.info("为检测出的社区创建超级节点（level 4），并附带关键词信息")
         _tree_comm.create_super_nodes_with_keywords(comm_to_nodes, level=4)
 
         # 可选功能：将关键词连接到社区（当前被注释掉）

@@ -40,7 +40,7 @@ class KTRetriever:
             dataset: str,
             json_path: str = None,
             qa_encoder: Optional[SentenceTransformer] = None,
-            device: str = "cuda",
+            device: str = "",
             cache_dir: str = "retriever/faiss_cache_new",
             top_k: int = 5,
             recall_paths: int = 2,
@@ -60,18 +60,20 @@ class KTRetriever:
         # 如果有配置，使用配置中的默认值覆盖传入参数
         if config:
             json_path = json_path or config.get_dataset_config(dataset).graph_output
-            device = device if device != "cuda" else config.embeddings.device
+            device = config.embeddings.device
             cache_dir = cache_dir if cache_dir != "retriever/faiss_cache_new" else config.retrieval.cache_dir
             top_k = top_k if top_k != 5 else config.retrieval.top_k
             recall_paths = recall_paths if recall_paths != 2 else config.retrieval.recall_paths
             schema_path = schema_path or config.get_dataset_config(dataset).schema_path
             mode = mode if mode != "agent" else config.triggers.mode
-            qa_encoder = qa_encoder or SentenceTransformer(config.embeddings.model_name)
+            qa_encoder = qa_encoder or SentenceTransformer(config.embeddings.model_name, device=device)
 
         # 加载图谱数据和编码器
+        logger.info(f"加载图谱数据")
         self.graph = graph_processor.load_graph_from_json(json_path)
         # self.qa_encoder = qa_encoder or SentenceTransformer('all-MiniLM-L6-v2')
-        self.qa_encoder = qa_encoder or SentenceTransformer('BAAI/bge-m3')
+        logger.info(f"加载编码器,device:{device}")
+        self.qa_encoder = qa_encoder or SentenceTransformer('BAAI/bge-m3', device=device)
 
         # 初始化LLM客户端用于生成答案
         self.llm_client = call_llm_api.LLMCompletionCall()
@@ -100,6 +102,7 @@ class KTRetriever:
         # self.nlp = spacy.load("en_core_web_lg")
         # 加载spaCy中文模型用于自然语言处理
         self.nlp = spacy.load("zh_core_web_lg")
+        logger.info(f"加载spaCy模型")
 
         # 初始化FAISS检索器用于向量相似度搜索
         self.faiss_retriever = DualFAISSRetriever(dataset, self.graph, cache_dir=cache_dir, device=self.device)

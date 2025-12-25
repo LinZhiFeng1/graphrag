@@ -32,7 +32,7 @@ class DualFAISSRetriever:
         # 存储传入的图对象和数据集名称
         self.graph = graph
         # 初始化 SentenceTransformer 模型用于文本嵌入
-        self.model = SentenceTransformer(model_name)
+        self.model = SentenceTransformer(model_name, device=device)
         # 设置缓存目录并确保其存在
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
