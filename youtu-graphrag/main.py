@@ -77,6 +77,9 @@ def parse_arguments():
     )
     parser.add_argument("--incremental", action="store_true",
                         help="Use incremental construction mode (no cache clear, use context)")
+    # 【新增】支持指定语料路径覆盖
+    parser.add_argument("--input_corpus", type=str, default=None,
+                        help="Override input corpus path (for merging new file into old graph)")
     return parser.parse_args()
 
 
@@ -131,13 +134,12 @@ def clear_cache_files(dataset_name: str) -> None:
         logger.error(f"Error clearing cache files for {dataset_name}: {e}")
 
 
-def graph_construction(datasets, is_incremental=False):
+def graph_construction(datasets, is_incremental=False, override_corpus_path=None):
     if config.triggers.constructor_trigger:
         logger.info(
             f"Starting knowledge graph construction (Mode: {'Incremental' if is_incremental else 'Standard'})...")
 
         for dataset in datasets:
-
             try:
                 dataset_config = config.get_dataset_config(dataset)
                 logger.info(f"Building knowledge graph for dataset: {dataset}")
@@ -157,9 +159,13 @@ def graph_construction(datasets, is_incremental=False):
                     config=config,
                     is_incremental=is_incremental
                 )
+                # 【关键】确定使用哪个语料
+                # 如果命令行传了 --input_corpus，就用命令行的（例如指向 aviation_1/corpus.json）
+                # 否则用配置文件里的默认语料
+                final_corpus_path = override_corpus_path if override_corpus_path else dataset_config.corpus_path
 
-                builder.build_knowledge_graph(dataset_config.corpus_path)
-                logger.info(f"Successfully built knowledge graph for {dataset}")
+                logger.info(f"Building with corpus: {final_corpus_path}")
+                builder.build_knowledge_graph(final_corpus_path)
 
             except Exception as e:
                 logger.error(f"Failed to build knowledge graph for {dataset}: {e}")
@@ -584,7 +590,11 @@ if __name__ == "__main__":
     # ########### Construction ###########
     if config.triggers.constructor_trigger:
         logger.info("Starting knowledge graph construction...")
-        graph_construction(datasets, is_incremental=args.incremental)
+        graph_construction(
+            datasets,
+            is_incremental=args.incremental,
+            override_corpus_path=args.input_corpus  # 【传入参数】
+        )
 
     # ########### Retriever ###########
     if config.triggers.retrieve_trigger:
