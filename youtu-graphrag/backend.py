@@ -201,7 +201,7 @@ async def read_root():
 @app.get("/api/status")
 async def get_status():
     return {
-        "message": "Youtu-GraphRAG Unified Interface is running!",
+        "message": "后端初始化完毕",
         "status": "ok",
         "graphrag_available": GRAPHRAG_AVAILABLE
     }
@@ -1349,6 +1349,84 @@ async def get_graph_data(dataset_name: str):
 
     return await prepare_graph_visualization(graph_path)
 
+
+# 添加复制数据集的接口
+@app.post("/api/datasets/{source_dataset_name}/copy")
+async def copy_dataset(source_dataset_name: str, request: Dict[str, str]):
+    """
+    复制数据集接口
+    参数:
+        source_dataset_name: 源数据集名称
+        request: 包含目标数据集名称的请求体
+    """
+    try:
+        # 获取目标数据集名称
+        target_dataset_name = request.get("target_dataset_name")
+
+        if not target_dataset_name:
+            raise HTTPException(status_code=400, detail="Target dataset name is required")
+
+        # 检查源数据集是否存在
+        source_dir = f"data/uploaded/{source_dataset_name}"
+        if not os.path.exists(source_dir) and source_dataset_name != "demo":
+            raise HTTPException(status_code=404, detail=f"Source dataset '{source_dataset_name}' not found")
+
+        # 不许复制demo数据集
+        if source_dataset_name == "demo":
+            raise HTTPException(status_code=400, detail="Cannot copy demo dataset")
+
+        # 检查目标数据集是否已存在
+        target_dir = f"data/uploaded/{target_dataset_name}"
+        if os.path.exists(target_dir):
+            raise HTTPException(status_code=409, detail=f"Target dataset '{target_dataset_name}' already exists")
+
+        # 创建目标目录
+        os.makedirs(target_dir, exist_ok=True)
+
+        # 复制上传的数据集文件
+        source_corpus = f"{source_dir}/corpus.json"
+        if os.path.exists(source_corpus):
+            shutil.copy2(source_corpus, f"{target_dir}/corpus.json")
+
+        # 复制 schema 文件（如果存在）
+        source_schema = f"schemas/{source_dataset_name}.json"
+        target_schema = f"schemas/{target_dataset_name}.json"
+        if os.path.exists(source_schema):
+            shutil.copy2(source_schema, target_schema)
+
+        # 复制生成的图谱文件（如果存在）
+        source_graph = f"output/graphs/{source_dataset_name}_new.json"
+        target_graph = f"output/graphs/{target_dataset_name}_new.json"
+        if os.path.exists(source_graph):
+            shutil.copy2(source_graph, target_graph)
+
+        # 复制文本块文件（如果存在）
+        source_chunk = f"output/chunks/{source_dataset_name}.txt"
+        target_chunk = f"output/chunks/{target_dataset_name}.txt"
+        if os.path.exists(source_chunk):
+            shutil.copy2(source_chunk, target_chunk)
+
+        # 复制 FAISS 缓存目录（如果存在）
+        source_cache_dir = f"retriever/faiss_cache_new/{source_dataset_name}"
+        target_cache_dir = f"retriever/faiss_cache_new/{target_dataset_name}"
+        if os.path.exists(source_cache_dir):
+            shutil.copytree(source_cache_dir, target_cache_dir)
+
+        logger.info(f"Dataset '{source_dataset_name}' copied to '{target_dataset_name}' successfully")
+
+        return {
+            "success": True,
+            "message": f"Dataset '{source_dataset_name}' copied to '{target_dataset_name}' successfully",
+            "source_dataset": source_dataset_name,
+            "target_dataset": target_dataset_name
+        }
+
+    except HTTPException:
+        # 重新抛出 HTTP 异常
+        raise
+    except Exception as e:
+        logger.error(f"Error copying dataset '{source_dataset_name}' to '{target_dataset_name}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to copy dataset: {str(e)}")
 
 # 应用启动时创建必要的目录结构，并通过Uvicorn启动FastAPI应用服务
 @app.on_event("startup")
