@@ -309,7 +309,6 @@ class KTBuilder:
        Returns:
            LLM返回的JSON格式响应
        """
-        logger.info("🚀 Calling LLM API 🚀")
         logger.info(f"prompt:{prompt}")
         # 调用LLM客户端的API接口，传入提示词获取响应
         response = self.llm_client.call_api(prompt)

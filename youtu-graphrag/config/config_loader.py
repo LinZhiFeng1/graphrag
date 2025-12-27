@@ -224,8 +224,8 @@ class ConfigManager:
     def _validate_config(self) -> None:
         """Validate the loaded configuration."""
         for dataset_name, dataset_config in self.datasets.items():
-            if not os.path.exists(dataset_config.corpus_path):
-                logger.warning(f"找不到数据集 {dataset_name} 的语料库路径: {dataset_config.corpus_path}")
+            # if not os.path.exists(dataset_config.corpus_path):
+            #     logger.warning(f"找不到数据集 {dataset_name} 的语料库路径: {dataset_config.corpus_path}")
             if not os.path.exists(dataset_config.schema_path):
                 logger.warning(f"找不到数据集 {dataset_name} 的模式路径: {dataset_config.schema_path}")
 

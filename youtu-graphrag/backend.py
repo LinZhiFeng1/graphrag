@@ -1251,6 +1251,11 @@ async def reconstruct_dataset(dataset_name: str, client_id: str = "default"):
             shutil.rmtree(cache_dir)
             await send_progress_update(client_id, "reconstruction", 25, "已清理缓存文件...")
 
+        # 删除现有的文本文件
+        chunk_file = f"output/chunks/{dataset_name}.txt"
+        if os.path.exists(chunk_file):
+            os.remove(chunk_file)
+
         await send_progress_update(client_id, "reconstruction", 35, "重新初始化图构建器...")
 
         # 初始化配置
@@ -1354,7 +1359,7 @@ async def startup_event():
     os.makedirs("output/logs", exist_ok=True)
     os.makedirs("schemas", exist_ok=True)
 
-    logger.info("🚀 Youtu-GraphRAG Unified Interface initialized")
+    logger.info("后端服务启动成功")
 
 
 if __name__ == "__main__":

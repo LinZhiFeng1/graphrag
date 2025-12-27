@@ -68,7 +68,7 @@ datasets:
 #显存不够记得改
 embeddings:
   batch_size: 32
-  device: cuda:1
+  device: cuda:4
   max_length: 1024
   model_name: BAAI/bge-m3
 
@@ -437,7 +437,7 @@ retrieval:
   enable_query_enhancement: true
   enable_reranking: true
   faiss:
-    device: cuda:1
+    device: cuda:4
     max_workers: 4
     search_k: 50
   recall_paths: 2
