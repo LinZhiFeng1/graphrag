@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from datetime import datetime
 from typing import Optional
@@ -29,7 +30,7 @@ class ColoredFormatter(logging.Formatter):
 
 def setup_logger(name: str = "youtu-graphrag",
                  level: int = logging.INFO,
-                 log_file: Optional[str] = None) -> logging.Logger:
+                 log_dir: Optional[str] = "output/logs") -> logging.Logger:
     """
     Setup and return a logger instance with colored output
     
@@ -63,10 +64,18 @@ def setup_logger(name: str = "youtu-graphrag",
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    # Add file handler if log_file is specified
-    if log_file:
-        file_handler = logging.FileHandler(log_file)
+    # Create log directory if it doesn't exist
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+        # 根据日期生成日志文件名
+        today = datetime.now().strftime('%Y-%m-%d')
+        log_filename = os.path.join(log_dir, f"{today}.log")
+
+        # Add file handler for daily log files
+        file_handler = logging.FileHandler(log_filename, encoding='utf-8')
         file_handler.setLevel(level)
+
         # File handler without colors
         file_formatter = logging.Formatter(
             fmt='[%(asctime)s] %(levelname)-8s %(module)s:%(lineno)d - %(message)s',
@@ -78,8 +87,8 @@ def setup_logger(name: str = "youtu-graphrag",
     return logger
 
 
-# Create default logger instance
-logger = setup_logger()
+# Create default logger instance with log directory
+logger = setup_logger(log_dir="output/logs")
 
 
 def progress(stage: str, message: str, *, done: bool | None = None):
