@@ -28,7 +28,7 @@ class ColoredFormatter(logging.Formatter):
         return formatted
 
 
-def setup_logger(name: str = "youtu-graphrag",
+def setup_logger(name: str = "graphrag",
                  level: int = logging.INFO,
                  log_dir: Optional[str] = "output/logs") -> logging.Logger:
     """

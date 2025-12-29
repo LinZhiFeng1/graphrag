@@ -223,11 +223,11 @@ class ConfigManager:
 
     def _validate_config(self) -> None:
         """Validate the loaded configuration."""
-        for dataset_name, dataset_config in self.datasets.items():
-            # if not os.path.exists(dataset_config.corpus_path):
-            #     logger.warning(f"找不到数据集 {dataset_name} 的语料库路径: {dataset_config.corpus_path}")
-            if not os.path.exists(dataset_config.schema_path):
-                logger.warning(f"找不到数据集 {dataset_name} 的模式路径: {dataset_config.schema_path}")
+        # for dataset_name, dataset_config in self.datasets.items():
+        #     # if not os.path.exists(dataset_config.corpus_path):
+        #     #     logger.warning(f"找不到数据集 {dataset_name} 的语料库路径: {dataset_config.corpus_path}")
+        #     if not os.path.exists(dataset_config.schema_path):
+        #         logger.warning(f"找不到数据集 {dataset_name} 的模式路径: {dataset_config.schema_path}")
 
         valid_modes = ["agent", "noagent"]
         if self.triggers.mode not in valid_modes:
@@ -246,7 +246,7 @@ class ConfigManager:
     def get_dataset_config(self, dataset_name: str) -> DatasetConfig:
         """Get configuration for a specific dataset."""
         if dataset_name not in self.datasets:
-            logger.warning(f"找不到数据集 {dataset_name} 的配置")
+            # logger.warning(f"找不到数据集 {dataset_name} 的配置")
             return self.datasets['demo']
         return self.datasets[dataset_name]
 

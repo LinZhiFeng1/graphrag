@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Simple but Complete Youtu-GraphRAG Backend
-Integrates real GraphRAG functionality with a simple interface
-"""
 
 import os
 import sys
@@ -39,7 +35,7 @@ except ImportError as e:
     GRAPHRAG_AVAILABLE = False
     logger.error(f"⚠️  GraphRAG components not available: {e}")
 
-app = FastAPI(title="Youtu-GraphRAG Unified Interface", version="1.0.0")
+app = FastAPI(title="GraphRAG Unified Interface", version="1.0.0")
 
 # Mount static files (assets directory)
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
@@ -194,7 +190,7 @@ async def read_root():
     frontend_path = "frontend/index.html"
     if os.path.exists(frontend_path):
         return FileResponse(frontend_path)
-    return {"message": "Youtu-GraphRAG Unified Interface is running!", "status": "ok"}
+    return {"message": "GraphRAG Unified Interface is running!", "status": "ok"}
 
 
 # 返回服务状态信息

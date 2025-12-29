@@ -56,7 +56,7 @@ def merge_chunk_contents(chunk_ids, chunk_contents_dict):
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Youtu-GraphRAG Framework")
+    parser = argparse.ArgumentParser(description="GraphRAG Framework")
     parser.add_argument(
         "--config",
         type=str,
@@ -87,7 +87,7 @@ def setup_environment(config: ConfigManager):
     """Set up the environment based on configuration."""
     config.create_output_directories()
 
-    logger.info("Youtu-GraphRAG initialized")
+    logger.info("GraphRAG initialized")
     logger.info(f"Mode: {config.triggers.mode}")
     logger.info(f"Constructor enabled: {config.triggers.constructor_trigger}")
     logger.info(f"Retriever enabled: {config.triggers.retrieve_trigger}")

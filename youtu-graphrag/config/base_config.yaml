@@ -58,6 +58,9 @@ datasets:
   aviation:
     schema_path: schemas/aviation.json
     prompt_type: aviation
+  aviation_仅第二章:
+    schema_path: schemas/aviation.json
+    prompt_type: aviation
 
 #embeddings:
 #  batch_size: 32
@@ -68,7 +71,7 @@ datasets:
 #显存不够记得改
 embeddings:
   batch_size: 32
-  device: cuda:4
+  device: cuda:7
   max_length: 1024
   model_name: BAAI/bge-m3
 
@@ -121,6 +124,7 @@ prompts:
 
     【参考知识库】：
     以下是图谱中已存在的、与当前文本最相关的知识结构，请参考其术语规范和逻辑，保持提取的一致性：
+    
     ```{examples}```
     
     指南：
@@ -437,7 +441,7 @@ retrieval:
   enable_query_enhancement: true
   enable_reranking: true
   faiss:
-    device: cuda:4
+    device: cuda:7
     max_workers: 4
     search_k: 50
   recall_paths: 2

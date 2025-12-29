@@ -2579,6 +2579,7 @@ class KTRetriever:
             # 检查节点嵌入是否已在缓存中
             if node in self.node_embedding_cache:
                 node_embed = self.node_embedding_cache[node]
+                node_embed = node_embed.to(self.device)
             else:
                 # 如果不在缓存中，则计算节点文本的嵌入
                 node_embed = torch.tensor(self.qa_encoder.encode(node_text)).float().to(self.device)
