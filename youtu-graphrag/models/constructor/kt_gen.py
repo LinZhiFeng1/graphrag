@@ -146,6 +146,7 @@ class KTBuilder:
             return "暂无历史记录。"
 
         # 1. 编码 Chunk (取前512字符)
+        #todo 只取512么？
         chunk_vec = self.embedder.encode([chunk_text[:512]], normalize_embeddings=True)
 
         # 2. 向量相似度

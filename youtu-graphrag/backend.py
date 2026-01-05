@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import sys
 import json
 import asyncio
@@ -1423,6 +1424,97 @@ async def copy_dataset(source_dataset_name: str, request: Dict[str, str]):
     except Exception as e:
         logger.error(f"Error copying dataset '{source_dataset_name}' to '{target_dataset_name}': {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to copy dataset: {str(e)}")
+
+
+@app.put("/api/datasets/{dataset_name}/rename")
+async def rename_dataset(dataset_name: str, request: Dict[str, str]):
+    """
+   重命名数据集接口
+   参数:
+       dataset_name: 原数据集名称
+       request: 包含新数据集名称的请求体
+   """
+    try:
+        # 获取新数据集名称
+        new_dataset_name = request.get("new_dataset_name")
+
+        if not new_dataset_name:
+            raise HTTPException(status_code=400, detail="需要新数据集名称")
+
+        # 验证新名称格式
+        if not re.match(r'^[\u4e00-\u9fa5a-zA-Z0-9 _-]+$', new_dataset_name):
+            raise HTTPException(
+                status_code=400,
+                detail="新数据集名称格式错误，请使用中文、英文、数字、下划线、中划线、空格"
+            )
+
+        # 不允许重命名demo数据集
+        if dataset_name == "demo":
+            raise HTTPException(status_code=400, detail="不能重命名demo数据集")
+
+        # 检查原数据集是否存在
+        source_dir = f"data/uploaded/{dataset_name}"
+        if not os.path.exists(source_dir):
+            raise HTTPException(status_code=404, detail=f"源数据集 '{dataset_name}' 不存在")
+
+        # 检查新数据集名称是否已存在
+        target_dir = f"data/uploaded/{new_dataset_name}"
+        if os.path.exists(target_dir):
+            raise HTTPException(status_code=409, detail=f"目标数据集 '{new_dataset_name}' 已经存在")
+
+        # 检查新名称的schema文件是否已存在
+        target_schema = f"schemas/{new_dataset_name}.json"
+        if os.path.exists(target_schema):
+            raise HTTPException(status_code=409,
+                                detail=f"目标数据集 '{new_dataset_name}' 的schema文件已经存在")
+
+        # 检查新名称的图谱文件是否已存在
+        target_graph = f"output/graphs/{new_dataset_name}_new.json"
+        if os.path.exists(target_graph):
+            raise HTTPException(status_code=409,
+                                detail=f"图谱文件 '{new_dataset_name}' 已经存在")
+
+        # 检查新名称的chunk文件是否已存在
+        target_chunk = f"output/chunks/{new_dataset_name}.txt"
+        if os.path.exists(target_chunk):
+            raise HTTPException(status_code=409,
+                                detail=f"文本块文件 '{new_dataset_name}' 已经存在")
+
+        # 执行重命名操作
+        # 1. 重命名上传的数据集目录
+        os.rename(source_dir, target_dir)
+
+        # 3. 重命名图谱文件（如果存在）
+        source_graph = f"output/graphs/{dataset_name}_new.json"
+        if os.path.exists(source_graph):
+            shutil.move(source_graph, target_graph)
+
+        # 4. 重命名chunk文件（如果存在）
+        source_chunk = f"output/chunks/{dataset_name}.txt"
+        if os.path.exists(source_chunk):
+            shutil.move(source_chunk, target_chunk)
+
+        # 5. 重命名FAISS缓存目录（如果存在）
+        source_faiss_cache = f"retriever/faiss_cache_new/{dataset_name}"
+        target_faiss_cache = f"retriever/faiss_cache_new/{new_dataset_name}"
+        if os.path.exists(source_faiss_cache):
+            shutil.move(source_faiss_cache, target_faiss_cache)
+
+        logger.info(f"Dataset '{dataset_name}' renamed to '{new_dataset_name}' successfully")
+
+        return {
+            "success": True,
+            "message": f"Dataset '{dataset_name}' renamed to '{new_dataset_name}' successfully"
+        }
+
+    except HTTPException:
+        # 重新抛出 HTTP 异常
+        raise
+
+    except Exception as e:
+        logger.error(f"Error renaming dataset '{dataset_name}' to '{new_dataset_name}': {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to rename dataset: {str(e)}")
+
 
 # 应用启动时创建必要的目录结构，并通过Uvicorn启动FastAPI应用服务
 @app.on_event("startup")

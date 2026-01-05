@@ -1377,15 +1377,19 @@
             `<button class="btn btn-primary" onclick="constructGraph('${dataset.name}')">Construct</button>` :
             ''
         }                ${dataset.status === 'ready' ?
-            `<button class="btn btn-secondary" onclick="reconstructGraph('${dataset.name}')" title="Reconstruct Graph">🔄 Reconstruct</button>` :
-            ''
-        }                ${dataset.type !== 'demo' ?
-            `<button class="btn btn-danger" onclick="deleteDataset('${dataset.name}')" title="Delete Dataset">🗑️ Delete</button>` :
-            ''
-        }                ${dataset.type !== 'demo' ?
-            `<button class="btn btn-secondary" onclick="copyDataset('${dataset.name}')" title="Copy Dataset">📋 Copy</button>` :
-            ''
-        }            </div>
+        `<button class="btn btn-secondary" onclick="reconstructGraph('${dataset.name}')" title="Reconstruct Graph">🔄 Reconstruct</button>` :
+        ''
+    }                ${dataset.type !== 'demo' ?
+        `<button class="btn btn-warning" onclick="renameDataset('${dataset.name}')" title="Rename Dataset">✏️ Rename</button>` :
+        ''
+    }                ${dataset.type !== 'demo' ?
+        `<button class="btn btn-danger" onclick="deleteDataset('${dataset.name}')" title="Delete Dataset">🗑️ Delete</button>` :
+        ''
+    }                ${dataset.type !== 'demo' ?
+        `<button class="btn btn-secondary" onclick="copyDataset('${dataset.name}')" title="Copy Dataset">📋 Copy</button>` :
+        ''
+    }
+            </div>
             </div>
         `).join('');
     }
@@ -1597,6 +1601,50 @@
             console.error('Copy dataset error:', error);
             const errorMsg = error.response?.data?.detail || error.message;
             showMessage(`Failed to copy dataset: ${errorMsg}`, 'error');
+        }
+    }
+
+    async function renameDataset(datasetName) {
+        // 弹出输入框获取新数据集名称
+        const newName = prompt(`Enter the new name for dataset "${datasetName}":`, datasetName);
+
+        if (!newName || newName.trim() === '') {
+            showMessage('Rename operation cancelled - no new name provided.', 'info');
+            return;
+        }
+
+        const newDatasetName = newName.trim();
+
+        // 验证新名称是否有效（支持中文、英文字母、数字、下划线、连字符和空格）
+        if (!/^[\u4e00-\u9fa5a-zA-Z0-9 _-]+$/.test(newDatasetName)) {
+            showMessage('New dataset name can only contain Chinese characters, English letters, numbers, spaces, underscores, and hyphens.', 'error');
+            return;
+        }
+
+        // 确认重命名操作
+        if (newDatasetName === datasetName) {
+            showMessage('New name is the same as the current name.', 'info');
+            return;
+        }
+
+        try {
+            showMessage(`Renaming dataset "${datasetName}" to "${newDatasetName}"...`, 'info');
+
+            const response = await axios.put(`${API_BASE}/api/datasets/${datasetName}/rename`, {
+                new_dataset_name: newDatasetName
+            });
+
+            if (response.data.success) {
+                showMessage(`Dataset "${datasetName}" renamed to "${newDatasetName}" successfully!`, 'success');
+                // 刷新数据集列表
+                setTimeout(refreshData, 1000);
+            } else {
+                showMessage(`Failed to rename dataset: ${response.data.message}`, 'error');
+            }
+        } catch (error) {
+            console.error('Rename dataset error:', error);
+            const errorMsg = error.response?.data?.detail || error.message;
+            showMessage(`Failed to rename dataset: ${errorMsg}`, 'error');
         }
     }
 
