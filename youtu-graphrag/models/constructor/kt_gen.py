@@ -379,6 +379,9 @@ class KTBuilder:
         # 1. 获取图驱动上下文
         examples_context = self._get_relevant_subgraph_context(chunk)
 
+        # examples_context = ""
+        # logger.warning("⚠️ [Baseline模式] 已禁用拓扑语境感知！")
+
         # 2. 映射到增量 Prompt 模板 (例如 general -> general_incremental)
         prompt_type = "general_incremental"
         if self.config and hasattr(self.config, 'get_dataset_config'):
