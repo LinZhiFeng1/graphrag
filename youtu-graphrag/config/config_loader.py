@@ -244,11 +244,21 @@ class ConfigManager:
             raise ValueError("struct_weight must be between 0 and 1")
 
     def get_dataset_config(self, dataset_name: str) -> DatasetConfig:
-        """Get configuration for a specific dataset."""
-        if dataset_name not in self.datasets:
-            # logger.warning(f"找不到数据集 {dataset_name} 的配置")
-            return self.datasets['demo']
-        return self.datasets[dataset_name]
+        """Get configuration for a specific dataset with prefix matching support."""
+        # 首先尝试完全匹配
+        if dataset_name in self.datasets:
+            return self.datasets[dataset_name]
+
+        # 尝试前缀匹配 - 查找配置中的数据集名称是否是目标名称的前缀
+        # 例如：'aviation' 匹配 'aviation_1' 或 'aviation_second_part'
+        for config_dataset_name, config in self.datasets.items():
+            if dataset_name.startswith(config_dataset_name + "_") or dataset_name == config_dataset_name:
+                logger.info(f"Using prefix match config: '{config_dataset_name}' for dataset '{dataset_name}'")
+                return config
+
+        # 如果仍然找不到，返回demo配置作为默认值
+        # logger.warning(f"找不到数据集 {dataset_name} 的配置")
+        return self.datasets['demo']
 
     def get_prompt(self, category: str, prompt_type: str) -> str:
         """Get a specific prompt template."""
