@@ -38,5 +38,5 @@ def evaluate_graph(name, file_path):
 
 
 if __name__ == "__main__":
-    evaluate_graph("基准方法 (Baseline)", "graph_baseline.json")
-    evaluate_graph("本文方法 (Ours)", "graph_ours.json")
+    evaluate_graph("基准方法 (Baseline)", "evaluate/graph_baseline.json")
+    evaluate_graph("本文方法 (Ours)", "evaluate/graph_ours.json")
