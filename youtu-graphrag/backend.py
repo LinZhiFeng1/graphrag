@@ -416,8 +416,36 @@ async def construct_graph(request: GraphConstructionRequest, client_id: str = "d
             config = get_config("config/base_config.yaml")
 
         # 根据配置动态选择schema，未指定则使用默认的demo.json
-        schema_path = config.get_dataset_config(dataset_name).schema_path if config else "schemas/demo.json"
-        logger.info(f"使用的模式文件: {schema_path}")
+        # 获取目标数据集的 schema (如果 aviation_1 没有配置，就用 aviation 的)
+        # 注意：这里我们优先尝试获取 target 的配置，因为它肯定存在
+        dataset_config = config.get_dataset_config(dataset_name)
+        if dataset_config:
+            schema_path = dataset_config.schema_path
+            logger.info(f"使用的模式文件: {schema_path}")
+            user_input = input("是否继续？(y/n): ").lower().strip()
+            if user_input == 'y':
+                logger.info(f"用户确认使用认模式文件: {schema_path}")
+            elif user_input == 'n':
+                logger.info(f"用户取消使用默认模式文件: {schema_path}")
+                raise HTTPException(status_code=400, detail=f"用户取消使用配置: {schema_path}")
+            else:
+                logger.warning(f"无效输入 '{user_input}'，默认取消操作")
+                raise HTTPException(status_code=400, detail=f"无效输入，取消使用配置: {schema_path}")
+        else:
+            # 如果配置文件中没有对应配置，使用 demo.json 但需要用户确认
+            schema_path = "schemas/demo.json"
+            logger.info(f"使用的模式文件: {schema_path}")
+            print(f"\n⚠️  警告：找不到数据集 '{target_dataset}' 的配置，将使用默认配置 'schemas/demo.json'")
+            user_input = input("是否继续？(y/n): ").lower().strip()
+
+            if user_input == 'y':
+                logger.info(f"用户确认使用默认模式文件: {schema_path}")
+            elif user_input == 'n':
+                logger.info(f"用户取消使用默认模式文件: {schema_path}")
+                raise HTTPException(status_code=400, detail=f"用户取消使用默认配置: {schema_path}")
+            else:
+                logger.warning(f"无效输入 '{user_input}'，默认取消操作")
+                raise HTTPException(status_code=400, detail=f"无效输入，取消使用默认配置: {schema_path}")
 
         # 初始化KTBuilder图构建器
         builder = constructor.KTBuilder(
@@ -533,9 +561,20 @@ async def construct_graph_incremental(request: GraphConstructionIncrementalReque
         dataset_config = config.get_dataset_config(target_dataset)
         if dataset_config:
             schema_path = dataset_config.schema_path
+            logger.info(f"使用的模式文件: {schema_path}")
+            user_input = input("是否继续？(y/n): ").lower().strip()
+            if user_input == 'y':
+                logger.info(f"用户确认使用认模式文件: {schema_path}")
+            elif user_input == 'n':
+                logger.info(f"用户取消使用默认模式文件: {schema_path}")
+                raise HTTPException(status_code=400, detail=f"用户取消使用配置: {schema_path}")
+            else:
+                logger.warning(f"无效输入 '{user_input}'，默认取消操作")
+                raise HTTPException(status_code=400, detail=f"无效输入，取消使用配置: {schema_path}")
         else:
             # 如果配置文件中没有对应配置，使用 demo.json 但需要用户确认
             schema_path = "schemas/demo.json"
+            logger.info(f"使用的模式文件: {schema_path}")
             print(f"\n⚠️  警告：找不到数据集 '{target_dataset}' 的配置，将使用默认配置 'schemas/demo.json'")
             user_input = input("是否继续？(y/n): ").lower().strip()
 
@@ -547,7 +586,7 @@ async def construct_graph_incremental(request: GraphConstructionIncrementalReque
             else:
                 logger.warning(f"无效输入 '{user_input}'，默认取消操作")
                 raise HTTPException(status_code=400, detail=f"无效输入，取消使用默认配置: {schema_path}")
-        logger.info(f"使用的模式文件: {schema_path}")
+
 
 
         # ⚠️ 关键点：初始化 Builder 时用 target_dataset
