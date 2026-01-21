@@ -116,8 +116,10 @@ class KTBuilder:
 
             except Exception as e:
                 logger.error(f"❌ 热加载失败: {e}，将回退到空图谱")
+                raise FileNotFoundError(f"无法加载旧图谱文件 {old_graph_path}: {e}")
         else:
-            logger.warning(f"⚠️ 未找到旧图谱文件 {old_graph_path}，将开始全新构建")
+            logger.error(f"❌ 未找到旧图谱文件 {old_graph_path}，增量模式需要已有图谱文件，程序终止")
+            raise FileNotFoundError(f"增量模式要求必须存在旧图谱文件: {old_graph_path}")
 
     def _precompute_graph_embeddings(self):
         """【新增】为图谱中的 Entity 节点计算向量"""
