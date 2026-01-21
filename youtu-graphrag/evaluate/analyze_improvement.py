@@ -29,7 +29,6 @@ def analyze_diff():
     print(f"📊 Baseline 边数: {len(base_edges)}")
     print(f"📊 Ours     边数: {len(our_edges)}")
 
-
     # 2. 计算 Ours 独有的边 (Baseline 没发现，但 Ours 发现了)
     unique_edges = our_edges - base_edges
     print(f"\n✨ Ours 挖掘出的【独有新关系】: {len(unique_edges)} 条")

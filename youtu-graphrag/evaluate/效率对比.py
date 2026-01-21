@@ -2,31 +2,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# === 1. 实验数据配置 (基于你的真实数据) ===
-# 真实场景：全量(Ch2+Ch4)耗时 466s
-full_rebuild_total = 466.0
+# === 1. 真实实验数据配置 ===
+# 从实际测试中获得的数据
+# 全量构建各阶段时间（秒）
+real_full_times = [59.73+180.40, 73.99+232.74, 82.25+247.29, 94.54+281.13, 112.42+354.34]  # 20%, 40%, 60%, 80%, 100%
 
-# 真实场景：增量(Ch4)耗时 290s。
-# 假设 Ch4 约占总量的 50% (这是一个合理的预估，因为 Ch2 和 Ch4 篇幅相当)
-# 那么每增加 20% 数据的耗时约为：
-inc_step_cost = 290.0 * (20 / 50)  # 约 116s
+# 增量构建各阶段时间（秒）
+real_inc_times = [48.02+107.70, 59.09+154.74, 51.54+185.63, 62.79+226.25, 61.66+229.44]      # 20%, 40%, 60%, 80%, 100%
 
-# === 2. 模拟 5 个阶段的数据 ===
-stages = np.array([20, 40, 60, 80, 100]) # 数据量百分比
+# === 2. 五个阶段的数据 ===
+stages = np.array([20, 40, 60, 80, 100])  # 数据量百分比
 
-# 模拟全量构建：时间随数据量线性增长
-# 100% -> 466s, 20% -> 93.2s
-full_times = [full_rebuild_total * (s/100) for s in stages]
-
-# 模拟增量构建：
-# 20% 阶段：第一次构建，等同于全量 (或者略高，因为有索引开销)
-# 40%~100% 阶段：每次只处理新增的 20%，所以时间是常数 (116s)
-inc_times = []
-for s in stages:
-    if s == 20:
-        inc_times.append(full_times[0]) # 初始阶段两者差不多
-    else:
-        inc_times.append(inc_step_cost) # 后续阶段稳定在 116s
+# 使用真实数据
+full_times = real_full_times
+inc_times = real_inc_times
 
 # === 3. 生成图表 ===
 plt.figure(figsize=(10, 6), dpi=100)
@@ -59,7 +48,7 @@ for bar in bars2:
 
 # 保存
 plt.tight_layout()
-plt.savefig('efficiency_chart.png')
+plt.savefig('efficiency_chart_real.png')
 plt.show()
 
 # === 4. 生成论文表格数据 ===
@@ -69,5 +58,5 @@ df = pd.DataFrame({
     "Incremental (s)": [round(x, 1) for x in inc_times],
     "Speedup Ratio": [round(f/i, 2) for f, i in zip(full_times, inc_times)]
 })
-print("请将以下数据填入论文表格 3-x：")
+print("真实实验数据表格：")
 print(df)
