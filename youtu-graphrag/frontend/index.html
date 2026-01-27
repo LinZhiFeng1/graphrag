@@ -1137,6 +1137,15 @@
                 <!-- <textarea class="textarea" id="questionInput" placeholder="Demo Queston: When was the person who Messi's goals in Copa del Rey compared to get signed by Barcelona?"></textarea> -->
                 <textarea class="textarea" id="questionInput" placeholder="Enter your question here...">When was the person who Messi's goals in Copa del Rey compared to get signed by Barcelona?</textarea>
             </div>
+            <div class="input-group">
+    <label>Alpha (向量权重):</label>
+    <input type="number" id="alphaInput" class="input" value="1.0" min="0" max="1" step="0.1" placeholder="0.0-1.0">
+</div>
+
+<div class="input-group">
+    <label>Beta (拓扑权重):</label>
+    <input type="number" id="betaInput" class="input" value="0.0" min="0" max="1" step="0.1" placeholder="0.0-1.0">
+</div>
             <button class="btn" onclick="askQuestion()" id="askBtn">Ask Question</button>
 
             <div id="qaLoading" class="loading">
@@ -1752,11 +1761,23 @@
     async function askQuestion() {
         const datasetName = document.getElementById('qaDataset').value;
         const question = document.getElementById('questionInput').value.trim();
+        const alpha = parseFloat(document.getElementById('alphaInput').value) || 1.0;
+    const beta = parseFloat(document.getElementById('betaInput').value) || 0.0;
+
 
         if (!datasetName || !question) {
             showMessage('Please select a dataset and enter a question', 'error');
             return;
         }
+         // 验证 alpha 和 beta 的值
+    if (alpha < 0 || alpha > 1 || beta < 0 || beta > 1) {
+        showMessage('Alpha and Beta must be between 0 and 1', 'error');
+        return;
+    }
+
+    if (alpha + beta > 1) {
+        showMessage('Alpha and Beta sum should not exceed 1', 'warning');
+    }
 
         const loading = document.getElementById('qaLoading');
         const answerSection = document.getElementById('answerSection');
@@ -1770,6 +1791,8 @@
             const response = await axios.post(`${API_BASE}/api/ask-question`, {
                 question: question,
                 dataset_name: datasetName,
+                alpha: alpha,  // 添加 alpha 参数
+            beta: beta,    // 添加 beta 参数
                 client_id: 'web_client'
             });
 

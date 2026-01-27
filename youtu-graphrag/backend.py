@@ -104,6 +104,8 @@ class GraphConstructionResponse(BaseModel):
 class QuestionRequest(BaseModel):
     question: str
     dataset_name: str
+    alpha: Optional[float] = 1.0  # 新增
+    beta: Optional[float] = 0.0  # 新增
 
 
 class QuestionResponse(BaseModel):
@@ -851,6 +853,8 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         dataset_name = request.dataset_name
         question = request.question
         logger.info(f"处理问题: {question}")
+        logger.info(f"数据集名称: {dataset_name}")
+        logger.info(f"alpha:{request.alpha},beta:{request.beta}")
 
         # 发送进度更新到客户端
         await send_progress_update(client_id, "retrieval", 10, "初始化检索系统 (agent 模式)...")
@@ -930,7 +934,9 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             retrieval_results, elapsed = kt_retriever.process_retrieval_results(
                 sq_text,
                 top_k=config.retrieval.top_k_filter,
-                involved_types=involved_types
+                involved_types=involved_types,
+                alpha=request.alpha,  # 传入
+                beta=request.beta  # 传入
             )
             logger.info(f"检索完成")
             # 收集检索到的三元组和文本块

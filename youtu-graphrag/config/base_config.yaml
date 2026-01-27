@@ -444,7 +444,7 @@ retrieval:
     device: cuda:7
     max_workers: 4
     search_k: 50
-  recall_paths: 2
+  recall_paths: 1
   similarity_threshold: 0.3
   top_k: 20
   top_k_filter: 20

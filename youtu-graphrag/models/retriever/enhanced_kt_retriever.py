@@ -18,6 +18,9 @@ from utils import graph_processor
 from utils import call_llm_api
 from utils.logger import logger
 
+import networkx as nx
+from sklearn.preprocessing import MinMaxScaler
+
 try:
     from config import get_config
 except ImportError:
@@ -205,6 +208,64 @@ class KTRetriever:
             self.qa_encoder.encode(query)
         ).float().to(self.device)
         return query_embed
+
+    # ================= [Ch4 新增: 拓扑感知核心组件] =================
+
+    def _extract_local_subgraph(self, candidate_nodes: List[str], hop: int = 1) -> nx.Graph:
+        """构建局部诱导子图：包含候选节点及其 N-hop 邻居"""
+        if not candidate_nodes: return nx.Graph()
+
+        relevant_nodes = set(candidate_nodes)
+        if hop > 0:
+            current = list(relevant_nodes)
+            for _ in range(hop):
+                next_layer = []
+                for n in current:
+                    if self.graph.has_node(n):
+                        next_layer.extend(list(self.graph.neighbors(n)))
+                relevant_nodes.update(next_layer)
+                current = next_layer
+
+        # 使用 subgraph 创建子图视图，copy 确保它是独立的图对象
+        return self.graph.subgraph(list(relevant_nodes)).copy()
+
+    def _calculate_topology_scores(self, subgraph: nx.Graph, nodes: List[str]) -> Dict[str, float]:
+        """计算拓扑重要性 (PageRank)"""
+        if subgraph.number_of_nodes() == 0: return {n: 0.0 for n in nodes}
+        try:
+            # PageRank 衡量节点在局部引用网络中的核心地位
+            return {n: s for n, s in nx.pagerank(subgraph, alpha=0.85, max_iter=50).items() if n in nodes}
+        except:
+            # 回退策略
+            return {n: s for n, s in nx.degree_centrality(subgraph).items() if n in nodes}
+
+    def _hybrid_scoring(self, node_scores: Dict[str, float], alpha: float, beta: float) -> List[str]:
+        """执行混合评分：Score = alpha * Norm(Vec) + beta * Norm(Topo)"""
+        nodes = list(node_scores.keys())
+        if not nodes: return []
+
+        # 1. 准备向量分
+        vec_arr = np.array([node_scores[n] for n in nodes]).reshape(-1, 1)
+
+        # 2. 计算拓扑分
+        subgraph = self._extract_local_subgraph(nodes, hop=1)
+        topo_map = self._calculate_topology_scores(subgraph, nodes)
+        topo_arr = np.array([topo_map.get(n, 0.0) for n in nodes]).reshape(-1, 1)
+
+        # 3. 归一化 (Min-Max)
+        scaler = MinMaxScaler()
+        norm_vec = scaler.fit_transform(vec_arr).flatten() if np.ptp(vec_arr) > 0 else np.ones(len(nodes))
+        norm_topo = scaler.fit_transform(topo_arr).flatten() if np.ptp(topo_arr) > 0 else np.zeros(len(nodes))
+
+        # 4. 加权融合
+        final_scores = []
+        for i, node in enumerate(nodes):
+            score = alpha * norm_vec[i] + beta * norm_topo[i]
+            final_scores.append((node, score))
+
+        # 降序排列返回节点ID
+        final_scores.sort(key=lambda x: x[1], reverse=True)
+        return [x[0] for x in final_scores]
 
     def _precompute_node_texts(self):
         """
@@ -660,7 +721,7 @@ class KTRetriever:
                 recent_nodes = list(self.node_embedding_cache.keys())[-5000:]
                 self.node_embedding_cache = {k: self.node_embedding_cache[k] for k in recent_nodes}
 
-    def retrieve(self, question: str) -> Dict:
+    def retrieve(self, question: str, alpha: float = 1.0, beta: float = 0.0) -> Dict:
         """
         执行增强的双路径检索过程，包含查询理解和缓存机制。
         
@@ -684,11 +745,13 @@ class KTRetriever:
         all_chunk_ids = set()
 
         # 根据recall_paths参数决定使用单路径还是双路径检索
+        # 目前主要修改了 path1 (节点关系检索)
+        # 如果涉及 path2 (triples only)，暂未修改，保持原样
         if self.recall_paths == 1:
             # 单路径检索模式
             path_start = time.time()
             # 执行节点/关系嵌入检索
-            path1_results = self._node_relation_retrieval(question_embed, question)
+            path1_results = self._node_relation_retrieval(question_embed, question, alpha, beta)
             path1_time = time.time() - path_start
             # 记录查询编码和路径1检索的时间日志
             logger.info(f"查询编码耗时: {query_time:.3f}秒, 路径1检索耗时: {path1_time:.3f}秒")
@@ -712,6 +775,8 @@ class KTRetriever:
                 "chunk_ids": limited_chunk_ids
             }
         else:
+            # 多路径模式暂不支持混合评分，或需要去修改 _parallel_dual_path_retrieval 内部
+            # 建议实验时使用 recall_paths=1
             # 双路径并行检索模式
             parallel_start = time.time()
             # 并行执行双路径检索
@@ -721,7 +786,8 @@ class KTRetriever:
 
         return question_embed, result
 
-    def retrieve_with_type_filtering(self, question: str, involved_types: dict = None) -> Dict:
+    def retrieve_with_type_filtering(self, question: str, involved_types: dict = None, alpha: float = 1.0,
+                                     beta: float = 0.0) -> Dict:
         """
         增强检索，先基于类型过滤再进行相似度搜索。
 
@@ -745,7 +811,7 @@ class KTRetriever:
             type_start = time.time()
             # 执行类型基础的检索
             logger.info("开始使用基于类型的过滤路径")
-            type_filtered_results = self._type_based_retrieval(question_embed, question, involved_types)
+            type_filtered_results = self._type_based_retrieval(question_embed, question, involved_types, alpha, beta)
             type_filtering_time = time.time() - type_start
             logger.info(f"查询编码耗时: {query_time:.3f}秒, 基于类型的检索耗时: {type_filtering_time:.3f}秒")
 
@@ -756,7 +822,8 @@ class KTRetriever:
             logger.info(f"Query encoding: {query_time:.3f}s, Fallback to original retrieval")
             return original_results
 
-    def _type_based_retrieval(self, question_embed: torch.Tensor, question: str, involved_types: dict) -> Dict:
+    def _type_based_retrieval(self, question_embed: torch.Tensor, question: str, involved_types: dict,
+                              alpha: float = 1.0, beta: float = 0.0) -> Dict:
         """
         执行混合检索：基于类型的节点/关系路径过滤 + 原始其他路径。
 
@@ -772,7 +839,8 @@ class KTRetriever:
         if self.recall_paths == 1:
             # 单路径模式：仅对节点/关系路径进行类型过滤
             logger.info("开始使用单路径模式")
-            filtered_results = self._type_filtered_node_relation_retrieval(question_embed, question, involved_types)
+            filtered_results = self._type_filtered_node_relation_retrieval(question_embed, question, involved_types,
+                                                                           alpha, beta)
             return filtered_results
         else:
             # 多路径模式：仅对节点/关系路径进行类型过滤，保持其他路径原始状态
@@ -781,7 +849,7 @@ class KTRetriever:
             return hybrid_results
 
     def _type_filtered_node_relation_retrieval(self, question_embed: torch.Tensor, question: str,
-                                               involved_types: dict) -> Dict:
+                                               involved_types: dict, alpha: float = 1.0, beta: float = 0.0) -> Dict:
         """
         单路径检索，仅在节点/关系路径上进行类型过滤。
 
@@ -801,23 +869,49 @@ class KTRetriever:
 
         # 如果有类型过滤后的节点，则在这些节点上执行相似度搜索
         if type_filtered_nodes:
-            # 在过滤后的节点上执行相似度搜索
-            filtered_node_results = self._similarity_search_on_filtered_nodes(question_embed, type_filtered_nodes)
+            # ================= [Ch4 修改: 混合评分支持] =================
+            if beta > 0:
+                logger.info("类型过滤关系检索开始使用混合评分")
+                # 1. 计算所有过滤后节点的向量分数
+                # 注意：如果节点太多(>500)，可能需要先向量初筛再算分，这里假设过滤后数量可控
+                all_scores = self._batch_calculate_entity_similarities(question_embed, type_filtered_nodes)
 
-            # 从过滤后的节点结果中获取一跳三元组
-            one_hop_triples = self._get_one_hop_triples_from_nodes(filtered_node_results['top_nodes'])
+                # 从 all_scores 中提取 type_filtered_nodes 对应的分数，构建 node_scores 字典
+                node_scores = {}
+                for node in type_filtered_nodes:
+                    if node in all_scores:
+                        node_scores[node] = float(all_scores[node])
 
-            # 从过滤后的节点结果中提取文本块ID
-            chunk_ids = self._extract_chunk_ids_from_nodes(filtered_node_results['top_nodes'])
+                # 2. 混合重排
+                logger.info("混合重排开始")
+                top_nodes = self._hybrid_scoring(node_scores, alpha, beta)[:self.top_k]
 
-            # 构造结果字典
-            result = {
-                "path1_results": {
-                    "top_nodes": filtered_node_results['top_nodes'],
-                    "one_hop_triples": one_hop_triples
-                },
-                "chunk_ids": list(chunk_ids)
-            }
+                # 3. 获取上下文 (复用 helper 方法)
+                one_hop_triples = self._get_one_hop_triples_from_nodes(top_nodes)
+                chunk_ids = self._extract_chunk_ids_from_nodes(top_nodes)
+
+                # 构造结果结构 (模拟 filtered_node_results 的输出)
+                result = {
+                    "path1_results": {
+                        "top_nodes": top_nodes,
+                        "one_hop_triples": one_hop_triples
+                    },
+                    "chunk_ids": list(chunk_ids)
+                }
+            else:
+                # [原逻辑] 使用原有搜索方法
+                logger.info("类型过滤关系检索开始使用原始评分")
+                filtered_node_results = self._similarity_search_on_filtered_nodes(question_embed, type_filtered_nodes)
+                one_hop_triples = self._get_one_hop_triples_from_nodes(filtered_node_results['top_nodes'])
+                chunk_ids = self._extract_chunk_ids_from_nodes(filtered_node_results['top_nodes'])
+                result = {
+                    "path1_results": {
+                        "top_nodes": filtered_node_results['top_nodes'],
+                        "one_hop_triples": one_hop_triples
+                    },
+                    "chunk_ids": list(chunk_ids)
+                }
+            # ==========================================================
         else:
             # 如果没有类型过滤后的节点，则回退到标准的节点/关系检索
             result = self._node_relation_retrieval(question_embed, question)
@@ -1289,7 +1383,8 @@ class KTRetriever:
         # 方法直接返回，没有进一步的路径搜索逻辑
         return
 
-    def _node_relation_retrieval(self, question_embed: torch.Tensor, question: str = "") -> Dict:
+    def _node_relation_retrieval(self, question_embed: torch.Tensor, question: str = "", alpha: float = 1.0,
+                                 beta: float = 0.0) -> Dict:
         """执行节点/关系联合检索，结合多种检索策略获取最相关的信息"""
         # 设置并行执行的最大工作线程数
         max_workers = 4
@@ -1300,15 +1395,12 @@ class KTRetriever:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 转换查询向量以适应FAISS索引
             q_embed = self.faiss_retriever.transform_vector(question_embed)
-            # 设置搜索的节点数量，取top_k*3和50的较小值
-            search_k = min(self.top_k * 3, 50)
+            # [修改 1] 动态调整初筛数量：开启拓扑感知时扩大范围，否则保持原逻辑
+            current_k = self.top_k
+            search_k = min(self.top_k * 5, 200) if beta > 0 else min(self.top_k * 3, 50)
 
             # 提交FAISS节点搜索任务
-            future_faiss_nodes = executor.submit(
-                self._execute_faiss_node_search,
-                q_embed.cpu().numpy(),
-                search_k
-            )
+            future_faiss_nodes = executor.submit(self._execute_faiss_node_search, q_embed.cpu().numpy(), search_k)
 
             # 初始化关键词相关任务变量
             future_keywords = future_keyword_nodes = None
@@ -1368,28 +1460,29 @@ class KTRetriever:
                 keyword_candidate_nodes
             ) if keyword_candidate_nodes else None
 
-            # 收集所有候选节点及其相似度
-            candidate_nodes = []
-            # 获取FAISS节点相似度结果
-            faiss_similarities = future_faiss_sim.result()
+            # --- 收集所有分数 ---
+            node_scores = {}  # {node_id: vector_score}
 
-            # 添加FAISS候选节点
-            candidate_nodes.extend(
-                (node, sim) for node, sim in faiss_similarities.items()
-            )
+            faiss_sims = future_faiss_sim.result()
+            for n, s in faiss_sims.items(): node_scores[n] = float(s)
 
-            # 如果有关键词相似度结果，也添加到候选节点中
             if future_keyword_sim:
-                keyword_similarities = future_keyword_sim.result()
+                kw_sims = future_keyword_sim.result()
+                for n, s in kw_sims.items():
+                    if s > 0.05: node_scores[n] = float(s)
 
-                candidate_nodes.extend(
-                    (node, sim) for node, sim in keyword_similarities.items()
-                    if sim > 0.05  # 过滤掉相似度太低的结果
-                )
-
-            # 按相似度排序并选择top_k个节点
-            candidate_nodes.sort(key=lambda x: x[1], reverse=True)
-            top_nodes = [node for node, score in candidate_nodes[:self.top_k] if score > 0.05]
+            # ================= [修改 2: 混合重排序逻辑] =================
+            if beta > 0 and node_scores:
+                logger.info(f"触发拓扑重排序 (Candidates={len(node_scores)}, α={alpha}, β={beta})")
+                # 使用混合评分重新排序所有候选节点
+                sorted_all_nodes = self._hybrid_scoring(node_scores, alpha, beta)
+                # 截取最终的 Top-K
+                top_nodes = sorted_all_nodes[:current_k]
+            else:
+                # [原逻辑] 仅根据向量相似度排序
+                sorted_candidates = sorted(node_scores.items(), key=lambda x: x[1], reverse=True)
+                top_nodes = [n for n, s in sorted_candidates[:current_k] if s > 0.05]
+            # ==========================================================
 
             # 获取FAISS关系搜索结果
             all_relations = future_faiss_relations.result()
@@ -1423,7 +1516,7 @@ class KTRetriever:
                 triple for triple in
                 one_hop_triples + path_triples + relation_triples
             })
-            # 获取文本块检索结果
+
             chunk_results = future_chunk_retrieval.result()
 
         # 返回检索结果
@@ -1952,9 +2045,11 @@ class KTRetriever:
         all_scored_triples = []
 
         # 添加路径2的带评分三元组（如果存在）
-        path2_scored = results['path2_results'].get('scored_triples', [])
-        if path2_scored:
-            all_scored_triples.extend(path2_scored)
+        path2_results = results.get('path2_results', {})
+        if path2_results:
+            path2_scored = path2_results.get('scored_triples', [])
+            if path2_scored:
+                all_scored_triples.extend(path2_scored)
 
         # 添加路径1的重新排序三元组
         path1_triples = results['path1_results'].get('one_hop_triples', [])
@@ -2064,8 +2159,8 @@ class KTRetriever:
         # chunk2id是一个字典，存储了文本块ID到文本内容的映射关系
         return [self.chunk2id[chunk_id] for chunk_id in chunk_ids if chunk_id in self.chunk2id]
 
-    def process_retrieval_results(self, question: str, top_k: int = 20, involved_types: dict = None) -> Tuple[
-        Dict, float]:
+    def process_retrieval_results(self, question: str, top_k: int = 20, involved_types: dict = None, alpha: float = 1.0,
+                                  beta: float = 0.0) -> Tuple[Dict, float]:
         """
         处理检索结果，使用优化的结构和辅助方法
 
@@ -2083,10 +2178,10 @@ class KTRetriever:
         if involved_types:
             # 如果提供了类型信息，使用带类型过滤的检索方法
             logger.info("开始使用带类型过滤的检索方法")
-            question_embed, results = self.retrieve_with_type_filtering(question, involved_types)
+            question_embed, results = self.retrieve_with_type_filtering(question, involved_types, alpha, beta)
         else:
             # 否则使用普通的检索方法
-            question_embed, results = self.retrieve(question)
+            question_embed, results = self.retrieve(question, alpha, beta)
 
         retrieval_time = time.time() - start_time
         logger.info(f"检索耗时: {retrieval_time:.4f}秒")
@@ -2131,6 +2226,7 @@ class KTRetriever:
             'chunk_contents': matching_chunks,  # 文本块内容列表
             'chunk_retrieval_results': chunk_retrieval_results  # 文本块检索的格式化结果
         }
+        logger.info(f"返回结果数量: {len(retrieval_results['triples'])}")
 
         # 返回检索结果和检索时间
         return retrieval_results, retrieval_time

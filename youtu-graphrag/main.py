@@ -80,6 +80,8 @@ def parse_arguments():
     # 【新增】支持指定语料路径覆盖
     parser.add_argument("--input_corpus", type=str, default=None,
                         help="Override input corpus path (for merging new file into old graph)")
+    parser.add_argument("--alpha", type=float, default=1.0, help="Vector weight")
+    parser.add_argument("--beta", type=float, default=0.0, help="Topology weight")
     return parser.parse_args()
 
 
