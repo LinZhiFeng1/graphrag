@@ -72,10 +72,10 @@ class KTRetriever:
             qa_encoder = qa_encoder or SentenceTransformer(config.embeddings.model_name, device=device)
 
         # 加载图谱数据和编码器
-        logger.info(f"加载图谱数据")
+        # logger.info(f"加载图谱数据")
         self.graph = graph_processor.load_graph_from_json(json_path)
         # self.qa_encoder = qa_encoder or SentenceTransformer('all-MiniLM-L6-v2')
-        logger.info(f"加载编码器,device:{device}")
+        # logger.info(f"加载编码器,device:{device}")
         self.qa_encoder = qa_encoder or SentenceTransformer('BAAI/bge-m3', device=device)
 
         # 初始化LLM客户端用于生成答案
@@ -89,7 +89,7 @@ class KTRetriever:
             self.device = "cuda"
         else:
             self.device = device
-        logger.info(f"KTRetriever Using device: {self.device}")
+        # logger.info(f"KTRetriever Using device: {self.device}")
 
         # 设置基本参数
         self.cache_dir = cache_dir
@@ -298,8 +298,6 @@ class KTRetriever:
                 continue
 
         end_time = time.time()
-        logger.info(
-            f"已完成预计算 {len(self._node_text_cache)} 个节点的文本，耗时 {end_time - start_time:.2f} 秒")
 
         # 尝试将计算得到的节点文本缓存保存到磁盘
         try:
@@ -352,7 +350,7 @@ class KTRetriever:
 
                 # 检查加载的缓存与当前图是否一致
                 if not self._check_text_cache_consistency():
-                    logger.warning("文本缓存与当前图不一致，将重新构建")
+                    # logger.warning("文本缓存与当前图不一致，将重新构建")
                     return False
 
                 logger.info(
@@ -390,8 +388,8 @@ class KTRetriever:
             extra_nodes = cached_nodes - current_nodes
             # 如果多余节点数量超过当前图节点数量的10%，记录警告并返回False
             if len(extra_nodes) > len(current_nodes) * 0.1:
-                logger.warning(
-                    f"Text cache has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
+                # logger.warning(
+                #     f"Text cache has too many extra nodes: {len(extra_nodes)} extra vs {len(current_nodes)} current")
                 return False
 
             return True
@@ -613,7 +611,6 @@ class KTRetriever:
             try:
                 file_size = os.path.getsize(cache_path)
                 if file_size < 1000:
-                    logger.warning(f"警告: 缓存文件太小 ({file_size} 字节)，可能为空或已损坏")
                     return False
 
                 try:
@@ -871,7 +868,7 @@ class KTRetriever:
         if type_filtered_nodes:
             # ================= [Ch4 修改: 混合评分支持] =================
             if beta > 0:
-                logger.info("类型过滤关系检索开始使用混合评分")
+                logger.info("类型过滤关系检索开始使用混合拓扑评分")
                 # 1. 计算所有过滤后节点的向量分数
                 # 注意：如果节点太多(>500)，可能需要先向量初筛再算分，这里假设过滤后数量可控
                 all_scores = self._batch_calculate_entity_similarities(question_embed, type_filtered_nodes)
@@ -2510,8 +2507,7 @@ class KTRetriever:
         # 调用LLM客户端的API方法生成答案
         # self.llm_client是在__init__方法中初始化的call_llm_api.LLMCompletionCall实例
         answer = self.llm_client.call_api(prompt)
-        logger.info("检索到的上下文:")
-        logger.info(prompt)
+        logger.info(f"prompt:{prompt}")
         logger.info(f"Answer: {answer}")
         # 返回LLM生成的答案
         return answer
@@ -2547,8 +2543,8 @@ class KTRetriever:
                     # 如果找到了文本块ID，则添加到集合中
                     if chunk_id:
                         chunk_ids.add(str(chunk_id))
-                    else:
-                        logger.warning(f"Debug: No chunk ID found for node {node}")
+                    # else:
+                    #     logger.warning(f"Debug: No chunk ID found for node {node}")
                 else:
                     logger.warning(f"Debug: Node {node} not found in graph")
             except Exception as e:
@@ -3100,8 +3096,8 @@ class KTRetriever:
 
                 # 更新已处理节点计数器
                 processed_nodes += 1
-                if processed_nodes % 1000 == 0:
-                    logger.info(f"Indexed {processed_nodes}/{total_nodes} nodes")
+                # if processed_nodes % 1000 == 0:
+                #     logger.info(f"Indexed {processed_nodes}/{total_nodes} nodes")
 
             except Exception as e:
                 logger.error(f"Error indexing node {node}: {str(e)}")
@@ -3204,7 +3200,7 @@ class KTRetriever:
             # 计算图中存在但索引中缺失的节点
             missing_nodes = current_nodes - indexed_nodes
             if missing_nodes:
-                logger.warning(f"文本索引缺少图中 {len(missing_nodes)} 个节点")
+                # logger.warning(f"文本索引缺少图中 {len(missing_nodes)} 个节点")
                 return False
 
             # 计算索引中存在但图中不存在的节点（多余的节点）

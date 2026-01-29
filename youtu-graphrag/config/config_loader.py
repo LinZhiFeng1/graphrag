@@ -175,7 +175,7 @@ class ConfigManager:
             self._parse_config()
             self._validate_config()
 
-            logger.info(f"配置已成功从 {self.config_path} 加载")
+            # logger.info(f"配置已成功从 {self.config_path} 加载")
 
         except FileNotFoundError:
             raise FileNotFoundError(f"Configuration file not found: {self.config_path}")

@@ -153,6 +153,6 @@ class GraphQ:
                     "attributes": []
                 }
             }
-        logger.info(f"问题分解Prompt: {prompt}")
+        # logger.info(f"问题分解Prompt: {prompt}")
         logger.info(f"问题分解结果: {content}")
         return content  

@@ -56,7 +56,7 @@ class DualFAISSRetriever:
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        logger.info(f"DualFAISSRetriever using device: {self.device}")
+        # logger.info(f"DualFAISSRetriever using device: {self.device}")
 
         # 初始化嵌入存储属性
         self.node_embeddings = None  # 节点嵌入
@@ -798,7 +798,7 @@ class DualFAISSRetriever:
                 cache_path = cache_path_npz
             
             file_size = os.path.getsize(cache_path)
-            logger.info(f"已将包含 {len(numpy_cache)} 个条目的嵌入缓存保存到 {cache_path} (大小: {file_size} 字节)")
+            # logger.info(f"已将包含 {len(numpy_cache)} 个条目的嵌入缓存保存到 {cache_path} (大小: {file_size} 字节)")
             return True
                 
         except Exception as e:
@@ -985,7 +985,7 @@ class DualFAISSRetriever:
             for j, node in enumerate(valid_nodes):
                 self.node_embedding_cache[node] = embeddings[j].detach()
             
-            logger.info(f"Encoded batch {batch_num}/{total_batches} ({len(valid_nodes)} nodes)")
+            # logger.info(f"Encoded batch {batch_num}/{total_batches} ({len(valid_nodes)} nodes)")
             return len(valid_nodes)
             
         except Exception as e:
@@ -1025,8 +1025,6 @@ class DualFAISSRetriever:
         total_nodes = len(all_nodes)
         total_batches = (total_nodes + batch_size - 1) // batch_size
 
-        logger.info(f"总共需要处理的节点数: {total_nodes}")
-        logger.info(f"分 {total_batches} 批处理，每批大小为 {batch_size}")
 
         # 分批处理节点
         total_processed = 0
@@ -1037,8 +1035,8 @@ class DualFAISSRetriever:
             processed_count = self._process_batch(batch_nodes, batch_num, total_batches)
             total_processed += processed_count
 
-        logger.info(f"成功为 {len(self.node_embedding_cache)} 个节点预计算嵌入")
-        logger.info(f"处理成功率: {len(self.node_embedding_cache)}/{total_nodes} ({len(self.node_embedding_cache) / total_nodes * 100:.1f}%)")
+        # logger.info(f"成功为 {len(self.node_embedding_cache)} 个节点预计算嵌入")
+        # logger.info(f"处理成功率: {len(self.node_embedding_cache)}/{total_nodes} ({len(self.node_embedding_cache) / total_nodes * 100:.1f}%)")
 
         # 如果有节点嵌入被计算出来，则保存到磁盘缓存
         if self.node_embedding_cache:
@@ -1117,7 +1115,7 @@ class DualFAISSRetriever:
             self._build_relation_index()
             self._build_triple_index()
             self._build_community_index()
-            logger.info("FAISS索引和嵌入构建成功!")
+            # logger.info("FAISS索引和嵌入构建成功!")
             # 填充嵌入映射
             self._populate_embedding_maps()
 

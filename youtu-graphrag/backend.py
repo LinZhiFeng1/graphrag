@@ -1078,6 +1078,11 @@ Your reasoning:
             }
         }
 
+        logger.info(f"最终答案: {final_answer}")
+        logger.info(f"子问题: {sub_questions}")
+        logger.info(f"最终三元组: {final_triples}")
+        logger.info(f"最终文本块: {final_chunk_contents}")
+
         return QuestionResponse(
             answer=final_answer,
             sub_questions=sub_questions,
