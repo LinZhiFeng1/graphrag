@@ -53,7 +53,7 @@ async def process_and_save_single_question(question_row: Dict, alpha: float, bet
             '回答': result.answer,
             '三元组数量': len(result.retrieved_triples),
             '文本块数量': len(result.retrieved_chunks),
-            '三元组内容': '|'.join(result.retrieved_triples[:5]) if result.retrieved_triples else '',  # 只取前5个，避免过长
+            '三元组内容': '|'.join(result.retrieved_triples) if result.retrieved_triples else '',  # 只取前5个，避免过长
             '文本块内容': '|'.join(result.retrieved_chunks) if result.retrieved_chunks else '',
             '状态': 'success',
             '序号': actual_index
@@ -128,7 +128,7 @@ async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv
     # 检查起始位置是否有效
     if start_from < 1 or start_from > len(questions):
         print(f"起始位置 {start_from} 超出范围 (1-{len(questions)})，将从第1个问题开始")
-        start_from = 1
+        return
 
     print(f"从第 {start_from} 个问题开始处理...")
 
@@ -193,10 +193,10 @@ async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv
 
 async def main():
     """主函数"""
-    alpha = 0.75
+    alpha = 1
     beta = 1 - alpha
     input_csv = "evaluate/问答.csv"  # 输入CSV文件路径
-    output_csv = f"evaluate/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_实时保存.csv"  # 输出CSV文件路径
+    output_csv = f"evaluate/双路径/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_实时保存.csv"  # 输出CSV文件路径
 
 
 

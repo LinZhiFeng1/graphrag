@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>领域知识图谱问答系统 - 登录与注册</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 20px 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 300px;
+            /* 新增：确保盒模型为 content-box（默认），并防止子元素溢出 */
+            box-sizing: border-box; /* 👈 关键！确保 padding 不影响 width 计算 */
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        /* 强制输入框不溢出，留出安全边距 */
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* 👈 确保 padding/border 不增加总宽 */
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .switch-form {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .switch-form a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .switch-form a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container" id="loginContainer">
+    <h2>领域知识图谱问答系统</h2>
+    <h3>登录</h3>
+    <form id="loginForm">
+        <input type="text" id="loginUsername" placeholder="账号" required>
+        <input type="password" id="loginPassword" placeholder="密码" required>
+        <button type="submit">登录</button>
+    </form>
+    <div class="switch-form">
+        没有账号？<a href="#" onclick="showRegister()">立即注册</a>
+    </div>
+</div>
+
+<div class="container" id="registerContainer" style="display:none;">
+    <h2>领域知识图谱问答系统</h2>
+    <h3>注册</h3>
+    <form id="registerForm">
+        <input type="text" id="registerUsername" placeholder="账号" required>
+        <input type="password" id="registerPassword" placeholder="密码" required>
+        <input type="text" id="registerName" placeholder="姓名" required>
+        <button type="submit">注册</button>
+    </form>
+    <div class="switch-form">
+        已有账号？<a href="#" onclick="showLogin()">立即登录</a>
+    </div>
+</div>
+
+<script>
+    function showLogin() {
+        document.getElementById('loginContainer').style.display = 'block';
+        document.getElementById('registerContainer').style.display = 'none';
+    }
+
+    function showRegister() {
+        document.getElementById('loginContainer').style.display = 'none';
+        document.getElementById('registerContainer').style.display = 'block';
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const username = document.getElementById('loginUsername').value;
+        const password = document.getElementById('loginPassword').value;
+        alert(`登录成功！账号: ${username}`);
+        // 这里可以添加实际的登录逻辑
+    });
+
+    document.getElementById('registerForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const username = document.getElementById('registerUsername').value;
+        const password = document.getElementById('registerPassword').value;
+        const name = document.getElementById('registerName').value;
+        alert(`注册成功！账号: ${username}, 姓名: ${name}`);
+        // 这里可以添加实际的注册逻辑
+    });
+</script>
+
+</body>
+</html>
