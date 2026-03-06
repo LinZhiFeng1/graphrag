@@ -1,0 +1,143 @@
+[2026-03-04 18:06:52] INFO     backend:34 - ✅ GraphRAG components loaded successfully
+[2026-03-04 18:07:19] INFO     backend:34 - ✅ GraphRAG components loaded successfully
+[2026-03-04 18:07:19] INFO     backend:856 - 处理问题: 空气涡轮ППО是由什么部件传动的？
+[2026-03-04 18:07:19] INFO     backend:857 - 数据集名称: aviation
+[2026-03-04 18:07:19] INFO     backend:858 - alpha:1.0,beta:0.0
+[2026-03-04 18:07:19] INFO     backend:878 - 使用的模式文件: schemas/aviation.json
+[2026-03-04 18:07:19] INFO     backend:882 - 问题分解器初始化完成
+[2026-03-04 18:07:31] INFO     enhanced_kt_retriever:109 - 加载spaCy模型
+[2026-03-04 18:07:40] INFO     enhanced_kt_retriever:153 - 从 output/chunks/aviation.txt 加载了 85 个文本块
+[2026-03-04 18:07:40] INFO     enhanced_kt_retriever:159 - 使用传统RAG 模式：True
+[2026-03-04 18:07:40] INFO     enhanced_kt_retriever:669 - 从 retriever/faiss_cache_new/aviation/node_embedding_cache.pt 加载了包含 2505 个条目的节点嵌入缓存 (文件大小: 10755.1 KB)
+[2026-03-04 18:07:40] INFO     faiss_filter:1105 - 正在构建FAISS索引和嵌入...
+[2026-03-04 18:07:48] INFO     faiss_filter:1357 - ✓ 数据一致性验证通过: 所有图节点都有嵌入
+[2026-03-04 18:07:48] INFO     faiss_filter:1018 - 正在预计算节点嵌入...
+[2026-03-04 18:07:51] INFO     faiss_filter:171 - FAISS 索引预加载完成
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:327 - 已保存包含 3501 个条目的节点文本缓存到 retriever/faiss_cache_new/aviation/node_text_cache.pkl (大小: 211542 字节)
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:3193 - 文本索引与当前图不一致，将重新构建
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:3084 - 正在为关键词搜索构建优化的节点文本索引...
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:3128 - 构建节点文本索引耗时: 0.005391120910644531 秒
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:3156 - 已保存包含 2197 个词的节点文本索引到 retriever/faiss_cache_new/aviation/node_text_index.pkl (大小: 151201 字节)
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:3317 - 正在预计算文本块嵌入以支持直接文本块检索...
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:3589 - 从 retriever/faiss_cache_new/aviation/chunk_embedding_cache.pt 加载了包含 85 个条目的文本块嵌入缓存 (文件大小: 373365 字节)
+[2026-03-04 18:07:51] INFO     enhanced_kt_retriever:3320 - 成功从磁盘缓存加载文本块嵌入
+[2026-03-04 18:07:51] INFO     backend:893 - 检索器初始化完成
+[2026-03-04 18:07:51] INFO     backend:897 - 开始构建索引
+[2026-03-04 18:07:51] INFO     faiss_filter:1105 - 正在构建FAISS索引和嵌入...
+[2026-03-04 18:07:59] INFO     faiss_filter:1357 - ✓ 数据一致性验证通过: 所有图节点都有嵌入
+[2026-03-04 18:07:59] INFO     faiss_filter:1018 - 正在预计算节点嵌入...
+[2026-03-04 18:08:01] INFO     backend:899 - 索引构建完成
+[2026-03-04 18:08:01] INFO     backend:910 - 开始进行问题分解
+[2026-03-04 18:08:07] INFO     agentic_decomposer:157 - 问题分解结果: {'sub_questions': [{'sub-question': '空气涡轮ППО是什么部件？'}, {'sub-question': '传动空气涡轮ППО的部件是什么？'}], 'involved_types': {'nodes': ['部件', '系统'], 'relations': ['包含', '属于系统'], 'attributes': ['名称', '类型', '位置']}}
+[2026-03-04 18:08:07] INFO     backend:920 - 问题分解完成
+[2026-03-04 18:08:07] INFO     backend:930 - 开始进行初始检索
+[2026-03-04 18:08:07] INFO     backend:935 - 开始处理检索结果，子问题 1/2: 空气涡轮ППО是什么部件？
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2198 - 开始使用带类型过滤的检索方法
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:822 - 开始将自然语言问题转换为向量表示（嵌入）
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:831 - 开始使用基于类型的过滤路径
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:859 - 开始使用单路径模式
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:921 - 类型过滤关系检索开始使用原始评分
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:1069 - 成功获取了过滤节点的嵌入向量
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:1079 - 开始执行相似度搜索,，找到与问题最相似的节点
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:834 - 查询编码耗时: 0.039秒, 基于类型的检索耗时: 0.056秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2205 - 检索耗时: 0.0945秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2866 - [StepTiming] 步骤：批量编码三元组文本 耗时=0.0212秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2876 - [StepTiming] 步骤：批量计算相似度 耗时=0.0078秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2901 - [StepTiming] 步骤：按评分降序排序三元组 耗时=0.0297秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2247 - 返回结果数量: 20
+[2026-03-04 18:08:07] INFO     backend:943 - 检索完成
+[2026-03-04 18:08:07] INFO     backend:935 - 开始处理检索结果，子问题 2/2: 传动空气涡轮ППО的部件是什么？
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2198 - 开始使用带类型过滤的检索方法
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:822 - 开始将自然语言问题转换为向量表示（嵌入）
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:831 - 开始使用基于类型的过滤路径
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:859 - 开始使用单路径模式
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:921 - 类型过滤关系检索开始使用原始评分
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:1069 - 成功获取了过滤节点的嵌入向量
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:1079 - 开始执行相似度搜索,，找到与问题最相似的节点
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:834 - 查询编码耗时: 0.017秒, 基于类型的检索耗时: 0.051秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2205 - 检索耗时: 0.0680秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2866 - [StepTiming] 步骤：批量编码三元组文本 耗时=0.0200秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2876 - [StepTiming] 步骤：批量计算相似度 耗时=0.0002秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2901 - [StepTiming] 步骤：按评分降序排序三元组 耗时=0.0285秒
+[2026-03-04 18:08:07] INFO     enhanced_kt_retriever:2247 - 返回结果数量: 20
+[2026-03-04 18:08:07] INFO     backend:943 - 检索完成
+[2026-03-04 18:08:07] INFO     backend:971 - 开始进行迭代推理
+[2026-03-04 18:08:09] INFO     enhanced_kt_retriever:2531 - prompt: 你是知识问答助手，你的任务是根据提供的知识上下文回答问题。
+1. 仅使用提供的知识上下文中的信息来回答问题 2. 如果知识不足，请说明无法回答 3. 回答应精确简洁 4. 对于事实性问题，提供具体的事实或实体名称 5. 对于时间性问题，提供具体的日期、年份或时间段
+问题：空气涡轮ППО是由什么部件传动的？
+知识上下文： === Triples ===
+([Unknown Node: ППО涡轮] , kw_filter_by, [Unknown Node: ППО涡轮] ) [score: 0.526]
+([Unknown Node: ППО涡轮] , 执行操作, [Unknown Node: 接通ППО] ) [score: 0.578]
+([Unknown Node: 控制起动机前的压缩空气压力] , kw_filter_by, [Unknown Node: 控制起动机前的压缩空气压力] ) [score: 0.463]
+([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统排气操作组] ) [score: 0.519]
+([Unknown Node: 应急关闭ППО装置] , member_of, [Unknown Node: ППО涡轮装置控制] ) [score: 0.574]
+([Unknown Node: 恒速传动装置] , 包含, [Unknown Node: 恒速传动调节器РППО-30П] ) [score: 0.527]
+([Unknown Node: ППО涡轮] , kw_filter_by, [Unknown Node: ППО涡轮] ) [score: 0.502]
+([Unknown Node: 应急关闭ППО装置] , represented_by, [Unknown Node: 应急关闭ППО装置] ) [score: 0.441]
+([Unknown Node: ППО涡轮] , represented_by, [Unknown Node: ППО涡轮] ) [score: 0.512]
+([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 位置: 发动机后传动机匣] ) [score: 0.546]
+([Unknown Node: 恒速传动装置] , 包含, [Unknown Node: ППО涡轮] ) [score: 0.635]
+([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统气塞与排气联盟] ) [score: 0.517]
+([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 类型: 空气涡轮] ) [score: 0.582]
+([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 类型: 空气涡轮] ) [score: 0.600]
+([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统气塞与排气联盟] ) [score: 0.519]
+([Unknown Node: 恒速传动系统] , 包含, [Unknown Node: 空气涡轮ППО] ) [score: 0.658]
+([Unknown Node: 控制起动机前的压缩空气压力] , represented_by, [Unknown Node: 控制起动机前的压缩空气压力] ) [score: 0.454]
+([Unknown Node: ППО涡轮] , 执行操作, [Unknown Node: 接通ППО] ) [score: 0.577]
+([Unknown Node: 控制起动机前的压缩空气压力] , member_of, [Unknown Node: 发动机引气与起动系统] ) [score: 0.506]
+([Unknown Node: 应急关闭ППО装置] , 执行操作, [Unknown Node: 应急关闭ППО] ) [score: 0.436]
+=== Chunks ===
+
+答案（精确直接）： 
+[2026-03-04 18:08:09] INFO     enhanced_kt_retriever:2532 - Answer: 根据提供的知识上下文，空气涡轮ППО由恒速传动系统包含。
+[2026-03-04 18:08:18] INFO     enhanced_kt_retriever:2531 - prompt:
+You are an expert knowledge assistant using iterative retrieval with chain-of-thought reasoning.
+Current Question: 空气涡轮ППО是由什么部件传动的？
+Current Iteration Query: 空气涡轮ППО是由什么部件传动的？
+Knowledge Context:
+=== Triples ===
+([Unknown Node: ППО涡轮] , kw_filter_by, [Unknown Node: ППО涡轮] ) [score: 0.526]
+([Unknown Node: ППО涡轮] , 执行操作, [Unknown Node: 接通ППО] ) [score: 0.578]
+([Unknown Node: 控制起动机前的压缩空气压力] , kw_filter_by, [Unknown Node: 控制起动机前的压缩空气压力] ) [score: 0.463]
+([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统排气操作组] ) [score: 0.519]
+([Unknown Node: 应急关闭ППО装置] , member_of, [Unknown Node: ППО涡轮装置控制] ) [score: 0.574]
+([Unknown Node: 恒速传动装置] , 包含, [Unknown Node: 恒速传动调节器РППО-30П] ) [score: 0.527]
+([Unknown Node: ППО涡轮] , kw_filter_by, [Unknown Node: ППО涡轮] ) [score: 0.502]
+([Unknown Node: 应急关闭ППО装置] , represented_by, [Unknown Node: 应急关闭ППО装置] ) [score: 0.441]
+([Unknown Node: ППО涡轮] , represented_by, [Unknown Node: ППО涡轮] ) [score: 0.512]
+([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 位置: 发动机后传动机匣] ) [score: 0.546]
+([Unknown Node: 恒速传动装置] , 包含, [Unknown Node: ППО涡轮] ) [score: 0.635]
+([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统气塞与排气联盟] ) [score: 0.517]
+([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 类型: 空气涡轮] ) [score: 0.582]
+([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 类型: 空气涡轮] ) [score: 0.600]
+([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统气塞与排气联盟] ) [score: 0.519]
+([Unknown Node: 恒速传动系统] , 包含, [Unknown Node: 空气涡轮ППО] ) [score: 0.658]
+([Unknown Node: 控制起动机前的压缩空气压力] , represented_by, [Unknown Node: 控制起动机前的压缩空气压力] ) [score: 0.454]
+([Unknown Node: ППО涡轮] , 执行操作, [Unknown Node: 接通ППО] ) [score: 0.577]
+([Unknown Node: 控制起动机前的压缩空气压力] , member_of, [Unknown Node: 发动机引气与起动系统] ) [score: 0.506]
+([Unknown Node: 应急关闭ППО装置] , 执行操作, [Unknown Node: 应急关闭ППО] ) [score: 0.436]
+=== Chunks ===
+
+Previous Thoughts: Initial: 根据提供的知识上下文，空气涡轮ППО由恒速传动系统包含。
+Instructions:
+1. If enough info answer with: So the answer is: <answer>
+2. Else propose new query with: The new query is: <query>
+Your reasoning:
+
+[2026-03-04 18:08:18] INFO     enhanced_kt_retriever:2532 - Answer: 根据知识上下文，关键信息是：
+- ([Unknown Node: 恒速传动系统] , 包含, [Unknown Node: 空气涡轮ППО] ) [score: 0.658]
+- ([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 类型: 空气涡轮] ) [score: 0.582]
+- ([Unknown Node: 恒速传动装置] , 包含, [Unknown Node: ППО涡轮] ) [score: 0.635]
+
+这些三元组明确指出空气涡轮ППО是恒速传动系统（或恒速传动装置）的一部分，即它被恒速传动系统所包含。因此，空气涡轮ППО是由恒速传动系统（或恒速传动装置）传动的。
+
+So the answer is: 空气涡轮ППО是由恒速传动系统（恒速传动装置）传动的。
+[2026-03-04 18:08:18] INFO     backend:1083 - 最终答案: 空气涡轮ППО是由恒速传动系统（恒速传动装置）传动的。
+[2026-03-04 18:08:18] INFO     backend:1084 - 子问题: [{'sub-question': '空气涡轮ППО是什么部件？'}, {'sub-question': '传动空气涡轮ППО的部件是什么？'}]
+[2026-03-04 18:08:18] INFO     backend:1085 - 最终三元组: ['([Unknown Node: ППО涡轮] , kw_filter_by, [Unknown Node: ППО涡轮] ) [score: 0.526]', '([Unknown Node: ППО涡轮] , 执行操作, [Unknown Node: 接通ППО] ) [score: 0.578]', '([Unknown Node: 控制起动机前的压缩空气压力] , kw_filter_by, [Unknown Node: 控制起动机前的压缩空气压力] ) [score: 0.463]', '([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统排气操作组] ) [score: 0.519]', '([Unknown Node: 应急关闭ППО装置] , member_of, [Unknown Node: ППО涡轮装置控制] ) [score: 0.574]', '([Unknown Node: 恒速传动装置] , 包含, [Unknown Node: 恒速传动调节器РППО-30П] ) [score: 0.527]', '([Unknown Node: ППО涡轮] , kw_filter_by, [Unknown Node: ППО涡轮] ) [score: 0.502]', '([Unknown Node: 应急关闭ППО装置] , represented_by, [Unknown Node: 应急关闭ППО装置] ) [score: 0.441]', '([Unknown Node: ППО涡轮] , represented_by, [Unknown Node: ППО涡轮] ) [score: 0.512]', '([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 位置: 发动机后传动机匣] ) [score: 0.546]', '([Unknown Node: 恒速传动装置] , 包含, [Unknown Node: ППО涡轮] ) [score: 0.635]', '([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统气塞与排气联盟] ) [score: 0.517]', '([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 类型: 空气涡轮] ) [score: 0.582]', '([Unknown Node: ППО涡轮] , has_attribute, [Unknown Node: 类型: 空气涡轮] ) [score: 0.600]', '([Unknown Node: 将 ППО 应急风门放在打开位置] , member_of, [Unknown Node: 燃油系统气塞与排气联盟] ) [score: 0.519]', '([Unknown Node: 恒速传动系统] , 包含, [Unknown Node: 空气涡轮ППО] ) [score: 0.658]', '([Unknown Node: 控制起动机前的压缩空气压力] , represented_by, [Unknown Node: 控制起动机前的压缩空气压力] ) [score: 0.454]', '([Unknown Node: ППО涡轮] , 执行操作, [Unknown Node: 接通ППО] ) [score: 0.577]', '([Unknown Node: 控制起动机前的压缩空气压力] , member_of, [Unknown Node: 发动机引气与起动系统] ) [score: 0.506]', '([Unknown Node: 应急关闭ППО装置] , 执行操作, [Unknown Node: 应急关闭ППО] ) [score: 0.436]']
+[2026-03-04 18:08:18] INFO     backend:1086 - 最终文本块: []
+[2026-03-04 18:08:20] INFO     backend:856 - 处理问题: MKT-372电磁活门在什么情况下会接收到电压？
+[2026-03-04 18:08:20] INFO     backend:857 - 数据集名称: aviation
+[2026-03-04 18:08:20] INFO     backend:858 - alpha:1.0,beta:0.0
+[2026-03-04 18:08:20] INFO     backend:878 - 使用的模式文件: schemas/aviation.json
+[2026-03-04 18:08:20] INFO     backend:882 - 问题分解器初始化完成

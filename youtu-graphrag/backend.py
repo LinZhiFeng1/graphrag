@@ -106,6 +106,7 @@ class QuestionRequest(BaseModel):
     dataset_name: str
     alpha: Optional[float] = 1.0  # 新增
     beta: Optional[float] = 0.0  # 新增
+    use_traditional_rag: Optional[bool] = False  # [新增] 支持传统RAG 模式
 
 
 class QuestionResponse(BaseModel):
@@ -886,7 +887,8 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             schema_path=schema_path,
             top_k=config.retrieval.top_k_filter,
             mode="agent",  # 强制 agent 模式
-            config=config
+            config=config,
+            use_traditional_rag=request.use_traditional_rag  # [新增] 传递参数
         )
         logger.info("检索器初始化完成")
 
@@ -977,8 +979,14 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         initial_triples = _dedup(list(all_triples))
         initial_chunk_ids = list(set(all_chunk_ids))
         initial_chunk_contents = _merge_chunk_contents(initial_chunk_ids, all_chunk_contents)
-        context_initial = "=== Triples ===\n" + "\n".join(initial_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(
-            initial_chunk_contents[:10])
+
+        # [修改] 传统RAG 模式下只有文本块，没有三元组
+        if request.use_traditional_rag:
+            context_initial = "=== Relevant Chunks ===\n" + "\n".join(initial_chunk_contents[:10])
+        else:
+            context_initial = "=== Triples ===\n" + "\n".join(initial_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(
+                initial_chunk_contents[:10])
+
         init_prompt = kt_retriever.generate_prompt(question, context_initial)
         try:
             initial_answer = kt_retriever.generate_answer(init_prompt)
@@ -992,9 +1000,12 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             loop_triples = _dedup(list(all_triples))
             loop_chunk_ids = list(set(all_chunk_ids))
             loop_chunk_contents = _merge_chunk_contents(loop_chunk_ids, all_chunk_contents)
-            # 构建当前上下文
-            loop_ctx = "=== Triples ===\n" + "\n".join(loop_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(
-                loop_chunk_contents[:10])
+            # 构建上下文
+            if request.use_traditional_rag:
+                loop_ctx = "=== Relevant Chunks ===\n" + "\n".join(loop_chunk_contents[:10])
+            else:
+                loop_ctx = "=== Triples ===\n" + "\n".join(loop_triples[:20]) + "\n=== Chunks ===\n" + "\n".join(
+                    loop_chunk_contents[:10])
             # 生成推理提示词
             loop_prompt = f"""
 You are an expert knowledge assistant using iterative retrieval with chain-of-thought reasoning.

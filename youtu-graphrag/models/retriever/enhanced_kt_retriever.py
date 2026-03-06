@@ -49,7 +49,8 @@ class KTRetriever:
             recall_paths: int = 2,
             schema_path: str = None,
             mode: str = "agent",
-            config=None
+            config=None,
+            use_traditional_rag: bool = False  # [新增] 传统RAG 模式开关
     ):
         # 尝试获取全局配置
         if config is None and get_config is not None:
@@ -153,6 +154,9 @@ class KTRetriever:
             except Exception as e:
                 logger.error(f"Error loading chunks from {chunk_file}: {e}")
                 self.chunk2id = {}
+
+        self.use_traditional_rag = use_traditional_rag  # [新增]
+        logger.info(f"使用传统RAG 模式：{use_traditional_rag}")  # [新增]
 
         # 初始化性能优化相关组件
         self._node_text_index = None  # 节点文本索引
@@ -740,6 +744,23 @@ class KTRetriever:
 
         # 初始化存储所有文本块ID的集合
         all_chunk_ids = set()
+        # [新增] 传统RAG 模式：直接检索文本块
+        if self.use_traditional_rag:
+            logger.info("使用传统RAG 模式：直接检索文本块")
+            chunk_results = self._chunk_embedding_retrieval(question_embed, self.top_k)
+
+            # 提取文本块 ID
+            if chunk_results and 'chunk_ids' in chunk_results:
+                all_chunk_ids.update(chunk_results['chunk_ids'])
+
+            return question_embed, {
+                "path1_results": {
+                    "top_nodes": [],  # 不使用节点
+                    "one_hop_triples": [],  # 不使用三元组
+                    "chunk_results": chunk_results
+                },
+                "chunk_ids": list(all_chunk_ids)
+            }
 
         # 根据recall_paths参数决定使用单路径还是双路径检索
         # 目前主要修改了 path1 (节点关系检索)
@@ -2159,17 +2180,47 @@ class KTRetriever:
     def process_retrieval_results(self, question: str, top_k: int = 20, involved_types: dict = None, alpha: float = 1.0,
                                   beta: float = 0.0) -> Tuple[Dict, float]:
         """
-        处理检索结果，使用优化的结构和辅助方法
+        处理检索结果，使用优化的结构和辅助方法，支持传统RAG 模式
 
         参数:
             question: 查询问题
             top_k: 返回结果的数量限制，默认为20
             involved_types: 包含相关schema类型的字典，用于类型过滤
+            alpha: 向量相似度权重 (仅 GraphRAG 模式使用)
+            beta: 拓扑重要性权重 (仅 GraphRAG 模式使用)
 
         返回:
             元组(检索结果字典, 检索时间)
         """
         start_time = time.time()
+        # [新增] 传统RAG 模式：只检索文本块，不检索三元组
+        # [新增] 传统RAG 模式：只检索文本块，不检索三元组
+        if self.use_traditional_rag:
+            logger.info("传统RAG 模式：仅检索文本块")
+
+            # 编码问题
+            question_embed = self._get_query_embedding(question)
+
+            # 直接检索文本块
+            chunk_results = self._chunk_embedding_retrieval(question_embed, top_k=top_k)
+
+            # 处理文本块结果
+            formatted_chunks, chunk_ids = self._process_chunk_results(chunk_results, question_embed, top_k)
+
+            # 构造传统RAG 结果（无三元组）
+            retrieval_results = {
+                'triples': [],  # 传统RAG 不使用三元组
+                'chunk_ids': list(chunk_ids),
+                'chunk_contents': formatted_chunks if isinstance(formatted_chunks, dict) else {cid: chunk for cid, chunk
+                                                                                               in zip(chunk_ids,
+                                                                                                      formatted_chunks)},
+                'chunk_retrieval_results': formatted_chunks
+            }
+
+            retrieval_time = time.time() - start_time
+            logger.info(f"传统RAG 检索耗时：{retrieval_time:.4f}秒，返回{len(chunk_ids)}个文本块")
+
+            return retrieval_results, retrieval_time
 
         # 根据是否提供类型信息选择不同的检索方法
         if involved_types:

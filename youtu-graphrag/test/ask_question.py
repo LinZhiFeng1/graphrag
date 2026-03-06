@@ -14,7 +14,7 @@ from backend import ask_question, QuestionRequest
 
 
 async def process_and_save_single_question(question_row: Dict, alpha: float, beta: float, actual_index: int,
-                                           output_csv_path: str):
+                                           output_csv_path: str, use_traditional_rag: bool = False):
     """处理单个问题并立即保存结果"""
     question_text = question_row.get('问题', '')  # 假设问题列名为"问题"
 
@@ -40,7 +40,8 @@ async def process_and_save_single_question(question_row: Dict, alpha: float, bet
         question=question_text,
         dataset_name="aviation",  # 根据你的数据集调整
         alpha=alpha,
-        beta=beta
+        beta=beta,
+        use_traditional_rag=use_traditional_rag  # [修改] 设为 True 启用传统RAG
     )
 
     try:
@@ -109,7 +110,8 @@ def get_next_index(output_csv_path: str) -> int:
 
 
 async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv_path: str,
-                                                  start_from: int = 1, alpha: float = 1.0, beta: float = 0.0):
+                                                  start_from: int = 1, alpha: float = 1.0, beta: float = 0.0,
+                                                  use_traditional_rag: bool = False):
     """测试CSV中所有问题并追加保存结果，支持从指定位置开始"""
 
     # 读取CSV文件中的所有问题
@@ -151,7 +153,7 @@ async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv
 
         try:
             result = await process_and_save_single_question(
-                question_row, alpha, beta, actual_index, output_csv_path
+                question_row, alpha, beta, actual_index, output_csv_path, use_traditional_rag=use_traditional_rag
             )
 
             if result['状态'] == 'success':
@@ -196,9 +198,11 @@ async def main():
     alpha = 1
     beta = 1 - alpha
     input_csv = "evaluate/问答.csv"  # 输入CSV文件路径
-    output_csv = f"evaluate/双路径/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_实时保存.csv"  # 输出CSV文件路径
-
-
+    use_traditional_rag = True
+    if use_traditional_rag:
+        output_csv = f"evaluate/传统RAG/问答_结果_实时保存.csv"  # 输出CSV文件路径
+    else:
+        output_csv = f"evaluate/双路径/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_实时保存.csv"  # 输出CSV文件路径
 
     # 检查输出文件是否已存在
     if os.path.exists(output_csv):
@@ -219,7 +223,7 @@ async def main():
     print(f"输出文件: {output_csv}")
 
     await test_all_questions_from_csv_append_mode(input_csv, output_csv, start_from=start_from, alpha=alpha,
-                                                  beta=beta)
+                                                  beta=beta, use_traditional_rag=use_traditional_rag)
 
 
 if __name__ == "__main__":
