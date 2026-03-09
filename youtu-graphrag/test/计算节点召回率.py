@@ -6,7 +6,9 @@ import numpy as np
 folder_paths = [
     r"evaluate/老正确率结果",
     r"evaluate/双路径",
-    r"evaluate/传统RAG"
+    r"evaluate/传统RAG",
+r"evaluate/消融实验",
+    r"evaluate/GraphRAG"
 ]
 
 # 获取所有 CSV文件并按文件名排序

@@ -50,7 +50,9 @@ class KTRetriever:
             schema_path: str = None,
             mode: str = "agent",
             config=None,
-            use_traditional_rag: bool = False  # [新增] 传统RAG 模式开关
+            use_traditional_rag: bool = False,  # 传统RAG 模式开关
+            enable_dynamic_screening: bool = True,  # 动态调整初筛数量开关
+            enable_keyword_extraction: bool = True  # [新增] 关键词提取开关
     ):
         # 尝试获取全局配置
         if config is None and get_config is not None:
@@ -155,8 +157,21 @@ class KTRetriever:
                 logger.error(f"Error loading chunks from {chunk_file}: {e}")
                 self.chunk2id = {}
 
-        self.use_traditional_rag = use_traditional_rag  # [新增]
-        logger.info(f"使用传统RAG 模式：{use_traditional_rag}")  # [新增]
+        self.use_traditional_rag = use_traditional_rag
+        if use_traditional_rag:
+            logger.info(f"使用传统RAG 模式：{use_traditional_rag}")
+
+        self.enable_dynamic_screening = enable_dynamic_screening  #动态调整初筛数量开关
+        if enable_dynamic_screening:
+            logger.info(f"启用动态调整初筛数量：{enable_dynamic_screening}")
+        else:
+            logger.info(f"不启用动态调整初筛数量：{enable_dynamic_screening},做消融实验")
+
+        self.enable_keyword_extraction = enable_keyword_extraction  # [新增] 关键词提取开关
+        if enable_keyword_extraction:
+            logger.info(f"启用关键词提取：{enable_keyword_extraction}")
+        else:
+            logger.info(f"不启用关键词提取：{enable_keyword_extraction},做消融实验")
 
         # 初始化性能优化相关组件
         self._node_text_index = None  # 节点文本索引
@@ -1415,8 +1430,14 @@ class KTRetriever:
             q_embed = self.faiss_retriever.transform_vector(question_embed)
             # [修改 1] 动态调整初筛数量：开启拓扑感知时扩大范围，否则保持原逻辑
             current_k = self.top_k
-            search_k = min(self.top_k * 5, 200) if beta > 0 else min(self.top_k * 3, 50)
-
+            # ================= [消融实验支持] =================
+            if self.enable_dynamic_screening:
+                # 原始动态调整策略
+                search_k = min(self.top_k * 5, 200) if beta > 0 else min(self.top_k * 3, 50)
+            else:
+                # 消融实验：固定使用基线策略 (beta=0 时的策略)
+                logger.info("[消融实验支持] 启用基线策略 筛选量缩小")
+                search_k = min(self.top_k * 3, 50)
             # 提交FAISS节点搜索任务
             future_faiss_nodes = executor.submit(self._execute_faiss_node_search, q_embed.cpu().numpy(), search_k)
 

@@ -1,0 +1,37 @@
+[2026-03-07 19:07:47] INFO     backend:34 - ✅ GraphRAG components loaded successfully
+[2026-03-07 19:07:47] INFO     backend:856 - 处理问题: 空气涡轮ППО是由什么部件传动的？
+[2026-03-07 19:07:47] INFO     backend:857 - 数据集名称: aviation
+[2026-03-07 19:07:47] INFO     backend:858 - alpha:1.0,beta:0.0
+[2026-03-07 19:07:47] INFO     backend:878 - 使用的模式文件: schemas/aviation.json
+[2026-03-07 19:07:47] INFO     backend:882 - 问题分解器初始化完成
+[2026-03-07 19:08:47] INFO     backend:34 - ✅ GraphRAG components loaded successfully
+[2026-03-07 19:08:47] INFO     backend:856 - 处理问题: 空气涡轮ППО是由什么部件传动的？
+[2026-03-07 19:08:47] INFO     backend:857 - 数据集名称: aviation
+[2026-03-07 19:08:47] INFO     backend:858 - alpha:0.25,beta:0.75
+[2026-03-07 19:08:47] INFO     backend:878 - 使用的模式文件: schemas/aviation.json
+[2026-03-07 19:08:48] INFO     backend:882 - 问题分解器初始化完成
+[2026-03-07 19:09:34] INFO     backend:34 - ✅ GraphRAG components loaded successfully
+[2026-03-07 19:09:34] INFO     backend:856 - 处理问题: 空气涡轮ППО是由什么部件传动的？
+[2026-03-07 19:09:34] INFO     backend:857 - 数据集名称: aviation
+[2026-03-07 19:09:34] INFO     backend:858 - alpha:0.25,beta:0.75
+[2026-03-07 19:09:34] INFO     backend:878 - 使用的模式文件: schemas/aviation.json
+[2026-03-07 19:09:34] INFO     backend:882 - 问题分解器初始化完成
+[2026-03-07 19:09:49] INFO     enhanced_kt_retriever:110 - 加载spaCy模型
+[2026-03-07 19:09:57] INFO     enhanced_kt_retriever:154 - 从 output/chunks/aviation.txt 加载了 85 个文本块
+[2026-03-07 19:09:57] INFO     enhanced_kt_retriever:165 - 启用动态调整初筛数量：True
+[2026-03-07 19:09:57] INFO     enhanced_kt_retriever:677 - 从 retriever/faiss_cache_new/aviation/node_embedding_cache.pt 加载了包含 2505 个条目的节点嵌入缓存 (文件大小: 10755.1 KB)
+[2026-03-07 19:09:57] INFO     faiss_filter:1105 - 正在构建FAISS索引和嵌入...
+[2026-03-07 19:10:05] INFO     faiss_filter:1357 - ✓ 数据一致性验证通过: 所有图节点都有嵌入
+[2026-03-07 19:10:05] INFO     faiss_filter:1018 - 正在预计算节点嵌入...
+[2026-03-07 19:10:08] INFO     faiss_filter:171 - FAISS 索引预加载完成
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:335 - 已保存包含 3501 个条目的节点文本缓存到 retriever/faiss_cache_new/aviation/node_text_cache.pkl (大小: 211542 字节)
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:3236 - 文本索引与当前图不一致，将重新构建
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:3127 - 正在为关键词搜索构建优化的节点文本索引...
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:3171 - 构建节点文本索引耗时: 0.005539894104003906 秒
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:3199 - 已保存包含 2197 个词的节点文本索引到 retriever/faiss_cache_new/aviation/node_text_index.pkl (大小: 151204 字节)
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:3360 - 正在预计算文本块嵌入以支持直接文本块检索...
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:3632 - 从 retriever/faiss_cache_new/aviation/chunk_embedding_cache.pt 加载了包含 85 个条目的文本块嵌入缓存 (文件大小: 373365 字节)
+[2026-03-07 19:10:08] INFO     enhanced_kt_retriever:3363 - 成功从磁盘缓存加载文本块嵌入
+[2026-03-07 19:10:08] INFO     backend:893 - 检索器初始化完成
+[2026-03-07 19:10:08] INFO     backend:897 - 开始构建索引
+[2026-03-07 19:10:08] INFO     faiss_filter:1105 - 正在构建FAISS索引和嵌入...

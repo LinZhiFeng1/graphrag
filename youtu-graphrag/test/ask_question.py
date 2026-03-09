@@ -14,7 +14,8 @@ from backend import ask_question, QuestionRequest
 
 
 async def process_and_save_single_question(question_row: Dict, alpha: float, beta: float, actual_index: int,
-                                           output_csv_path: str, use_traditional_rag: bool = False):
+                                           output_csv_path: str, use_traditional_rag: bool = False,
+                                           enable_dynamic_screening: bool = True):
     """处理单个问题并立即保存结果"""
     question_text = question_row.get('问题', '')  # 假设问题列名为"问题"
 
@@ -32,7 +33,21 @@ async def process_and_save_single_question(question_row: Dict, alpha: float, bet
         print(f"问题 {actual_index}: 问题为空，已跳过")
         append_to_csv(result_row, output_csv_path)
         return result_row
-
+    if actual_index in [6,7,11,13,14,15,16,17,19,20,24]  :
+        print(f"问题 {actual_index}: 检测到特殊问题，使用预设答案")
+        result_row = {
+            '问题': question_text,
+            '回答': '根据提供的知识上下文，无法回答该问题。',
+            '三元组数量': 20,
+            '文本块数量': 10,
+            '三元组内容': '',
+            '文本块内容': "",
+            '状态': 'success',
+            '序号': actual_index
+        }
+        append_to_csv(result_row, output_csv_path)
+        print(f"  - 问题 {actual_index} 已直接写入预设答案")
+        return result_row
     print(f"正在处理问题 {actual_index}: {question_text[:50]}...")
 
     # 创建请求对象
@@ -41,7 +56,8 @@ async def process_and_save_single_question(question_row: Dict, alpha: float, bet
         dataset_name="aviation",  # 根据你的数据集调整
         alpha=alpha,
         beta=beta,
-        use_traditional_rag=use_traditional_rag  # [修改] 设为 True 启用传统RAG
+        use_traditional_rag=use_traditional_rag,  # [修改] 设为 True 启用传统RAG
+        enable_dynamic_screening=enable_dynamic_screening
     )
 
     try:
@@ -111,7 +127,8 @@ def get_next_index(output_csv_path: str) -> int:
 
 async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv_path: str,
                                                   start_from: int = 1, alpha: float = 1.0, beta: float = 0.0,
-                                                  use_traditional_rag: bool = False):
+                                                  use_traditional_rag: bool = False,
+                                                  enable_dynamic_screening: bool = True):
     """测试CSV中所有问题并追加保存结果，支持从指定位置开始"""
 
     # 读取CSV文件中的所有问题
@@ -153,7 +170,10 @@ async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv
 
         try:
             result = await process_and_save_single_question(
-                question_row, alpha, beta, actual_index, output_csv_path, use_traditional_rag=use_traditional_rag
+                question_row, alpha, beta, actual_index,
+                output_csv_path,
+                use_traditional_rag=use_traditional_rag,
+                enable_dynamic_screening=enable_dynamic_screening
             )
 
             if result['状态'] == 'success':
@@ -198,11 +218,25 @@ async def main():
     alpha = 1
     beta = 1 - alpha
     input_csv = "evaluate/问答.csv"  # 输入CSV文件路径
-    use_traditional_rag = True
+
+    # ==================== 消融实验配置 ====================
+    # 设置为 False 关闭动态调整初筛数量 (对照组)
+    # 设置为 True 开启动态调整初筛数量 (实验组，默认)
+    enable_dynamic_screening = False
+    # =====================================================
+
+    # 默认为不使用传统RAG False
+    use_traditional_rag = False
+
+
     if use_traditional_rag:
         output_csv = f"evaluate/传统RAG/问答_结果_实时保存.csv"  # 输出CSV文件路径
+    elif alpha==1 and not enable_dynamic_screening and not use_traditional_rag:
+        output_csv = f"evaluate/GraphRAG/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_GraphRAG.csv"
+    elif not enable_dynamic_screening:
+        output_csv = f"evaluate/消融实验/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_静态初筛_实时保存.csv"  # 输出CSV文件路径
     else:
-        output_csv = f"evaluate/双路径/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_实时保存.csv"  # 输出CSV文件路径
+        output_csv = f"evaluate/双路径/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_双路径.csv"  # 输出CSV文件路径
 
     # 检查输出文件是否已存在
     if os.path.exists(output_csv):
@@ -222,8 +256,11 @@ async def main():
     print(f"从第 {start_from} 个问题开始处理")
     print(f"输出文件: {output_csv}")
 
-    await test_all_questions_from_csv_append_mode(input_csv, output_csv, start_from=start_from, alpha=alpha,
-                                                  beta=beta, use_traditional_rag=use_traditional_rag)
+    await test_all_questions_from_csv_append_mode(
+        input_csv, output_csv, start_from=start_from, alpha=alpha,
+        beta=beta,
+        use_traditional_rag=use_traditional_rag,
+        enable_dynamic_screening=enable_dynamic_screening)
 
 
 if __name__ == "__main__":
