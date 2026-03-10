@@ -15,9 +15,10 @@ from backend import ask_question, QuestionRequest
 
 async def process_and_save_single_question(question_row: Dict, alpha: float, beta: float, actual_index: int,
                                            output_csv_path: str, use_traditional_rag: bool = False,
-                                           enable_dynamic_screening: bool = True):
+                                           enable_dynamic_screening: bool = True,
+                                           enable_keyword_extraction: bool = True):
     """处理单个问题并立即保存结果"""
-    question_text = question_row.get('问题', '')  # 假设问题列名为"问题"
+    question_text = question_row.get('问题', '')
 
     if not question_text:
         result_row = {
@@ -33,7 +34,7 @@ async def process_and_save_single_question(question_row: Dict, alpha: float, bet
         print(f"问题 {actual_index}: 问题为空，已跳过")
         append_to_csv(result_row, output_csv_path)
         return result_row
-    if actual_index in [6,7,11,13,14,15,16,17,19,20,24]  :
+    if actual_index in [6, 7, 11, 13, 14, 15, 16, 17, 19, 20, 24]:
         print(f"问题 {actual_index}: 检测到特殊问题，使用预设答案")
         result_row = {
             '问题': question_text,
@@ -56,8 +57,9 @@ async def process_and_save_single_question(question_row: Dict, alpha: float, bet
         dataset_name="aviation",  # 根据你的数据集调整
         alpha=alpha,
         beta=beta,
-        use_traditional_rag=use_traditional_rag,  # [修改] 设为 True 启用传统RAG
-        enable_dynamic_screening=enable_dynamic_screening
+        use_traditional_rag=use_traditional_rag,
+        enable_dynamic_screening=enable_dynamic_screening,
+        enable_keyword_extraction=enable_keyword_extraction
     )
 
     try:
@@ -128,7 +130,8 @@ def get_next_index(output_csv_path: str) -> int:
 async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv_path: str,
                                                   start_from: int = 1, alpha: float = 1.0, beta: float = 0.0,
                                                   use_traditional_rag: bool = False,
-                                                  enable_dynamic_screening: bool = True):
+                                                  enable_dynamic_screening: bool = True,
+                                                  enable_keyword_extraction: bool = True):
     """测试CSV中所有问题并追加保存结果，支持从指定位置开始"""
 
     # 读取CSV文件中的所有问题
@@ -173,7 +176,8 @@ async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv
                 question_row, alpha, beta, actual_index,
                 output_csv_path,
                 use_traditional_rag=use_traditional_rag,
-                enable_dynamic_screening=enable_dynamic_screening
+                enable_dynamic_screening=enable_dynamic_screening,
+                enable_keyword_extraction=enable_keyword_extraction
             )
 
             if result['状态'] == 'success':
@@ -215,24 +219,31 @@ async def test_all_questions_from_csv_append_mode(csv_file_path: str, output_csv
 
 async def main():
     """主函数"""
-    alpha = 1
+    alpha = 0.25
     beta = 1 - alpha
     input_csv = "evaluate/问答.csv"  # 输入CSV文件路径
 
     # ==================== 消融实验配置 ====================
     # 设置为 False 关闭动态调整初筛数量 (对照组)
     # 设置为 True 开启动态调整初筛数量 (实验组，默认)
-    enable_dynamic_screening = False
+    enable_dynamic_screening = True
+    # =====================================================
+
+    # ==================== 消融实验配置 ====================
+    # 设置为 False 关闭关键词提取 (对照组)
+    # 设置为 True 开启关键词提取 (实验组，默认)
+    enable_keyword_extraction = False
     # =====================================================
 
     # 默认为不使用传统RAG False
     use_traditional_rag = False
 
-
     if use_traditional_rag:
         output_csv = f"evaluate/传统RAG/问答_结果_实时保存.csv"  # 输出CSV文件路径
-    elif alpha==1 and not enable_dynamic_screening and not use_traditional_rag:
+    elif alpha == 1 and not enable_dynamic_screening and not use_traditional_rag:
         output_csv = f"evaluate/GraphRAG/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_GraphRAG.csv"
+    elif not enable_keyword_extraction:
+        output_csv = f"evaluate/消融实验/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_关闭关键词.csv"
     elif not enable_dynamic_screening:
         output_csv = f"evaluate/消融实验/问答_结果_alpha{alpha:.2f}_beta{beta:.2f}_静态初筛_实时保存.csv"  # 输出CSV文件路径
     else:
@@ -260,7 +271,8 @@ async def main():
         input_csv, output_csv, start_from=start_from, alpha=alpha,
         beta=beta,
         use_traditional_rag=use_traditional_rag,
-        enable_dynamic_screening=enable_dynamic_screening)
+        enable_dynamic_screening=enable_dynamic_screening,
+        enable_keyword_extraction=enable_keyword_extraction)
 
 
 if __name__ == "__main__":

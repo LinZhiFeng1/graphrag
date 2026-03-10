@@ -106,9 +106,9 @@ class QuestionRequest(BaseModel):
     dataset_name: str
     alpha: Optional[float] = 1.0  # 新增
     beta: Optional[float] = 0.0  # 新增
-    use_traditional_rag: Optional[bool] = False  # [新增] 支持传统RAG 模式
-    enable_dynamic_screening: Optional[bool] = True  # [新增] 动态调整初筛数量开关
-
+    use_traditional_rag: Optional[bool] = False  # 支持传统RAG 模式
+    enable_dynamic_screening: Optional[bool] = True  # 动态调整初筛数量开关
+    enable_keyword_extraction: Optional[bool] = True  # 关键词提取开关
 
 class QuestionResponse(BaseModel):
     answer: str
@@ -881,7 +881,6 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
         # 初始化问题分解器和检索器
         graphq = decomposer.GraphQ(dataset_name, config=config)
         logger.info("问题分解器初始化完成")
-        logger.info(f"是否起用动态筛选:{request.enable_dynamic_screening}")
         kt_retriever = retriever.KTRetriever(
             dataset_name,
             graph_path,
@@ -890,8 +889,9 @@ async def ask_question(request: QuestionRequest, client_id: str = "default"):
             top_k=config.retrieval.top_k_filter,
             mode="agent",  # 强制 agent 模式
             config=config,
-            use_traditional_rag=request.use_traditional_rag,  # [新增] 传递参数
-            enable_dynamic_screening=request.enable_dynamic_screening
+            use_traditional_rag=request.use_traditional_rag,
+            enable_dynamic_screening=request.enable_dynamic_screening,
+            enable_keyword_extraction=request.enable_keyword_extraction
         )
         logger.info("检索器初始化完成")
 

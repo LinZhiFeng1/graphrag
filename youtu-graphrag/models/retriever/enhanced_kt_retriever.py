@@ -165,13 +165,13 @@ class KTRetriever:
         if enable_dynamic_screening:
             logger.info(f"启用动态调整初筛数量：{enable_dynamic_screening}")
         else:
-            logger.info(f"不启用动态调整初筛数量：{enable_dynamic_screening},做消融实验")
+            logger.info(f"不启用动态调整初筛数量,做消融实验")
 
         self.enable_keyword_extraction = enable_keyword_extraction  # [新增] 关键词提取开关
         if enable_keyword_extraction:
             logger.info(f"启用关键词提取：{enable_keyword_extraction}")
         else:
-            logger.info(f"不启用关键词提取：{enable_keyword_extraction},做消融实验")
+            logger.info(f"不启用关键词提取,做消融实验")
 
         # 初始化性能优化相关组件
         self._node_text_index = None  # 节点文本索引
@@ -1443,8 +1443,9 @@ class KTRetriever:
 
             # 初始化关键词相关任务变量
             future_keywords = future_keyword_nodes = None
-            # 如果提供了问题文本，则执行关键词策略
-            if question:
+            # ================= [消融实验支持 - 关键词提取] ================
+            # 如果提供了问题文本，且启用了关键词提取，则执行关键词策略
+            if question and self.enable_keyword_extraction:
                 # 提交关键词提取任务
                 future_keywords = executor.submit(
                     self._extract_query_keywords,
@@ -1455,6 +1456,7 @@ class KTRetriever:
                     self._get_keyword_based_nodes,
                     future_keywords
                 )
+            # =============================================================
 
             # 提交FAISS关系搜索任务
             future_faiss_relations = executor.submit(
@@ -1510,7 +1512,7 @@ class KTRetriever:
                 for n, s in kw_sims.items():
                     if s > 0.05: node_scores[n] = float(s)
 
-            # ================= [修改 2: 混合重排序逻辑] =================
+            # ================= [混合重排序逻辑] =================
             if beta > 0 and node_scores:
                 logger.info(f"触发拓扑重排序 (Candidates={len(node_scores)}, α={alpha}, β={beta})")
                 # 使用混合评分重新排序所有候选节点
@@ -1527,10 +1529,15 @@ class KTRetriever:
             all_relations = future_faiss_relations.result()
 
             # 提交路径搜索任务
+            # ================= [消融实验支持 - 关键词提取] =================
+            # 如果禁用了关键词提取，则传递空列表给 path_based_search
+            keywords_for_path = (
+                future_keywords.result() if future_keywords else []) if self.enable_keyword_extraction else []
+            # =============================================================
             future_path_triples = executor.submit(
                 self._path_based_search,
                 top_nodes,
-                future_keywords.result() if future_keywords else [],
+                keywords_for_path,
                 max_depth=2
             ) if question else None
 
